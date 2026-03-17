@@ -1,0 +1,447 @@
+{
+  "id": "memory-hybrid-context",
+  "uiHints": {
+    "enabled": {
+      "label": "Enabled"
+    },
+    "store.path": {
+      "label": "Store Path",
+      "advanced": true
+    },
+    "store.vector.backend": {
+      "label": "Vector Backend",
+      "advanced": true
+    },
+    "store.vector.candidateLimit": {
+      "label": "Vector Candidate Limit",
+      "advanced": true
+    },
+    "store.vector.probePerBand": {
+      "label": "ANN Probe Per Band",
+      "advanced": true
+    },
+    "store.vector.embeddingVersion": {
+      "label": "Embedding Version",
+      "advanced": true
+    },
+    "store.vector.embedding.mode": {
+      "label": "Embedding Mode",
+      "advanced": true
+    },
+    "store.vector.embedding.baseURL": {
+      "label": "Embedding Base URL",
+      "advanced": true
+    },
+    "store.vector.embedding.model": {
+      "label": "Embedding Model",
+      "advanced": true
+    },
+    "store.vector.embedding.apiKeyEnv": {
+      "label": "Embedding API Key Env",
+      "advanced": true
+    },
+    "store.vector.embedding.dimensions": {
+      "label": "Embedding Dimensions",
+      "advanced": true
+    },
+    "store.vector.embedding.timeoutMs": {
+      "label": "Embedding Timeout(ms)",
+      "advanced": true
+    },
+    "store.vector.embedding.fallbackToHash": {
+      "label": "Embedding Fallback To Hash",
+      "advanced": true
+    },
+    "archive.dir": {
+      "label": "Archive Dir"
+    },
+    "capture.useLlmExtraction": {
+      "label": "LLM Extraction",
+      "advanced": true
+    },
+    "indexing.async": {
+      "label": "Async Indexing",
+      "advanced": true
+    },
+    "indexing.batchSize": {
+      "label": "Index Batch Size",
+      "advanced": true
+    },
+    "indexing.pollMs": {
+      "label": "Index Poll Interval",
+      "advanced": true
+    },
+    "indexing.retryLimit": {
+      "label": "Index Retry Limit",
+      "advanced": true
+    },
+    "recall.maxItems": {
+      "label": "Recall Max Items"
+    },
+    "recall.maxChars": {
+      "label": "Recall Max Chars",
+      "advanced": true
+    },
+    "scopes.primary": {
+      "label": "Primary Scope"
+    },
+    "scopes.fallback": {
+      "label": "Fallback Scope"
+    },
+    "scopes.autoMirror": {
+      "label": "Auto Mirror",
+      "advanced": true
+    },
+    "scopes.typeRouting": {
+      "label": "Type Routing",
+      "advanced": true
+    },
+    "projectResolver.mode": {
+      "label": "Project Resolver",
+      "advanced": true
+    },
+    "projectResolver.workspacePath": {
+      "label": "Project Workspace Path",
+      "advanced": true
+    },
+    "projectResolver.manualKey": {
+      "label": "Manual Project Key",
+      "advanced": true
+    },
+    "projectResolver.manualName": {
+      "label": "Manual Project Name",
+      "advanced": true
+    },
+    "ttl.todoDays": {
+      "label": "TODO TTL Days",
+      "advanced": true
+    },
+    "ttl.sessionDays": {
+      "label": "Session TTL Days",
+      "advanced": true
+    },
+    "ttl.autoCleanup": {
+      "label": "Auto Cleanup",
+      "advanced": true
+    },
+    "ttl.cleanupPollMs": {
+      "label": "Cleanup Interval",
+      "advanced": true
+    },
+    "ttl.purgeAfterDays": {
+      "label": "Purge Retention Days",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "debug": {
+        "type": "boolean"
+      },
+      "store": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "driver": {
+            "type": "string",
+            "enum": ["sqlite"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "vector": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "backend": {
+                "type": "string",
+                "enum": ["hash-vec", "sqlite-vec", "ann-local", "disabled"]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "extensionPath": {
+                "type": "string"
+              },
+              "candidateLimit": {
+                "type": "integer",
+                "minimum": 8,
+                "maximum": 256
+              },
+              "probePerBand": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              "embeddingVersion": {
+                "type": "string"
+              },
+              "embedding": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": ["hash", "openai-compatible"]
+                  },
+                  "baseURL": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "apiKey": {
+                    "type": "string"
+                  },
+                  "apiKeyEnv": {
+                    "type": "string"
+                  },
+                  "dimensions": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 8192
+                  },
+                  "timeoutMs": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 120000
+                  },
+                  "fallbackToHash": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "archive": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "writeMarkdown": {
+            "type": "boolean"
+          }
+        }
+      },
+      "capture": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "autoStage": {
+            "type": "boolean"
+          },
+          "useLlmExtraction": {
+            "type": "boolean"
+          },
+          "maxCandidatesPerTurn": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "captureAssistant": {
+            "type": "boolean"
+          }
+        }
+      },
+      "indexing": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "async": {
+            "type": "boolean"
+          },
+          "batchSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128
+          },
+          "pollMs": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 60000
+          },
+          "retryLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          }
+        }
+      },
+      "commit": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "onNew": {
+            "type": "boolean"
+          },
+          "onReset": {
+            "type": "boolean"
+          },
+          "idleMinutes": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "recall": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "auto": {
+            "type": "boolean"
+          },
+          "maxItems": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxChars": {
+            "type": "integer",
+            "minimum": 64
+          },
+          "defaultLevel": {
+            "type": "string",
+            "enum": ["L0", "L1", "L2"]
+          }
+        }
+      },
+      "query": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hybrid": {
+            "type": "boolean"
+          },
+          "ftsWeight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "vectorWeight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "rerank": {
+            "type": "boolean"
+          }
+        }
+      },
+      "scopes": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["user", "project", "agent"]
+            }
+          },
+          "primary": {
+            "type": "string",
+            "enum": ["user", "project", "agent"]
+          },
+          "fallback": {
+            "type": "string",
+            "enum": ["user", "project", "agent"]
+          },
+          "autoMirror": {
+            "type": "boolean"
+          },
+          "typeRouting": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "user": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "project": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "agent": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "enableProject": {
+            "type": "boolean"
+          },
+          "enableAgent": {
+            "type": "boolean"
+          }
+        }
+      },
+      "projectResolver": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["auto", "manual", "workspace", "git"]
+          },
+          "workspacePath": {
+            "type": "string"
+          },
+          "manualKey": {
+            "type": "string"
+          },
+          "manualName": {
+            "type": "string"
+          }
+        }
+      },
+      "ttl": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "todoDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          },
+          "sessionDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          },
+          "autoCleanup": {
+            "type": "boolean"
+          },
+          "cleanupPollMs": {
+            "type": "integer",
+            "minimum": 5000,
+            "maximum": 86400000
+          },
+          "purgeAfterDays": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3650
+          }
+        }
+      }
+    }
+  }
+}

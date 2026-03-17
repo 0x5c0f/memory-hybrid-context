@@ -1,0 +1,16 @@
+node_modules/
+
+# Runtime data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+
+# Release artifacts
+releases/
+*.bundle.tar.gz
+*.bundle.tar.gz.sha256
+*-latest.bundle.tar.gz
+*-latest.bundle.tar.gz.sha256
+*-latest.json
+

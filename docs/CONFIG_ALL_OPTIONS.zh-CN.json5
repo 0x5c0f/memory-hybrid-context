@@ -1,0 +1,381 @@
+{
+  // 使用说明：
+  // 1) 本文件中的“字段取值”默认按“可直接部署的推荐基线”给出；
+  // 2) 每个字段附近的“默认值（插件/OpenClaw）”注释，表示代码层真实默认值；
+  // 3) 当“字段取值”与“默认值注释”不一致时，以注释中的“默认值”作为真实默认，以文件取值作为推荐配置。
+  // =====================================================================
+  // OpenClaw 外层配置（宿主层）
+  // =====================================================================
+  hooks: {
+    internal: {
+      // 作用：启用内部 hook 系统。
+      // 默认值（OpenClaw）：true
+      enabled: true,
+      entries: {
+        "session-memory": {
+          // 作用：关闭官方旧 session-memory 归档，避免与本插件双写/冲突。
+          // 默认值（OpenClaw）：true
+          // 推荐值（使用本插件时）：false
+          enabled: false,
+        },
+      },
+    },
+  },
+
+  plugins: {
+    // 作用：插件信任白名单。必须包含 memory-hybrid-context 才能稳定受信运行。
+    // 默认值（OpenClaw）：[]
+    allow: [
+      "memory-hybrid-context",
+    ],
+
+    slots: {
+      // 作用：关闭默认 memory slot，避免默认记忆链路与本插件并行。
+      // 默认值（OpenClaw）：由宿主版本决定，通常不是 "none"
+      // 推荐值（使用本插件时）："none"
+      memory: "none",
+    },
+
+    entries: {
+      "memory-hybrid-context": {
+        // 作用：插件注册开关（外层）。
+        // 默认值（OpenClaw）：false（通常未显式配置时视为未启用）
+        enabled: true,
+
+        config: {
+          // =================================================================
+          // 插件内部配置（memory-hybrid-context）
+          // =================================================================
+
+          // 作用：插件内部总开关。false 时仅加载元信息，不启用服务/工具/Hook。
+          // 默认值（插件）：false
+          enabled: true,
+
+          // 作用：调试日志开关。true 会输出更多诊断信息。
+          // 默认值（插件）：false
+          debug: false,
+
+          store: {
+            // 作用：存储驱动类型。
+            // 默认值（插件）："sqlite"
+            // 可选值："sqlite"（当前仅支持 sqlite）
+            driver: "sqlite",
+
+            // 作用：SQLite 主数据库文件路径。
+            // 默认值（插件）："~/.openclaw/memory-hybrid/main.sqlite"
+            path: "~/.openclaw/memory-hybrid/main.sqlite",
+
+            vector: {
+              // 作用：向量后端类型。
+              // 默认值（插件）："sqlite-vec"
+              // 推荐值：中大规模优先 "ann-local"；稳定保守可用 "sqlite-vec"。
+              // 可选值："hash-vec" | "sqlite-vec" | "ann-local" | "disabled"
+              backend: "sqlite-vec",
+
+              // 作用：向量检索总开关。false 时仅使用 FTS/关键词检索。
+              // 默认值（插件）：true
+              enabled: true,
+
+              // 作用：sqlite-vec 原生扩展路径。留空按运行时自动加载。
+              // 默认值（插件）：""
+              extensionPath: "",
+
+              // 作用：向量候选召回上限。
+              // 默认值（插件）：48
+              // 范围（schema）：8 ~ 256
+              candidateLimit: 48,
+
+              // 作用：ANN 探测强度（仅相关后端生效）。
+              // 默认值（插件）：1
+              // 范围（schema）：0 ~ 4
+              probePerBand: 1,
+
+              // 作用：嵌入版本标签，用于标记向量代际。
+              // 默认值（插件）："v1"
+              embeddingVersion: "v1",
+
+              embedding: {
+                // 作用：嵌入模式。
+                // 默认值（插件）："hash"
+                // 可选值："hash" | "openai-compatible"
+                mode: "hash",
+
+                // 作用：openai-compatible 模式的 Base URL。
+                // 默认值（插件）：""
+                baseURL: "",
+
+                // 作用：openai-compatible 模式的嵌入模型名。
+                // 默认值（插件）：""
+                model: "",
+
+                // 作用：API Key 明文（不推荐生产使用）。
+                // 默认值（插件）：""
+                apiKey: "",
+
+                // 作用：API Key 的环境变量名。优先从该环境变量取密钥。
+                // 默认值（插件）："OPENAI_API_KEY"
+                apiKeyEnv: "OPENAI_API_KEY",
+
+                // 作用：嵌入维度。0 表示由服务端/模型默认维度决定。
+                // 默认值（插件）：0
+                // 范围（schema）：0 ~ 8192
+                dimensions: 0,
+
+                // 作用：嵌入请求超时（毫秒）。
+                // 默认值（插件）：15000
+                // 范围（schema）：1000 ~ 120000
+                timeoutMs: 15000,
+
+                // 作用：嵌入失败时是否降级到 hash 向量。
+                // 默认值（插件）：true
+                fallbackToHash: true,
+              },
+            },
+          },
+
+          archive: {
+            // 作用：归档总开关。false 时不写归档文件。
+            // 默认值（插件）：true
+            enabled: true,
+
+            // 作用：归档目录。记忆 Markdown、会话快照写入此目录。
+            // 默认值（插件）："~/.openclaw/workspace/.memory-hybrid"
+            // 兼容性说明：不要复用系统级 session-memory 常见目录（如 ~/.openclaw/workspace/memory），
+            // 否则会与旧链路混写，导致归档来源混杂和治理困难。
+            // 推荐：保持独立目录（本默认值），并与 store.path 分离（数据库与归档分离）。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：archive.dir）
+            dir: "~/.openclaw/workspace/.memory-hybrid",
+
+            // 作用：是否写 Markdown 归档。
+            // 默认值（插件）：true
+            writeMarkdown: true,
+          },
+
+          capture: {
+            // 作用：每轮对话结束后自动暂存候选记忆。
+            // 默认值（插件）：true
+            autoStage: true,
+
+            // 作用：是否使用 LLM 进行候选抽取（当前默认规则抽取）。
+            // 默认值（插件）：false
+            useLlmExtraction: false,
+
+            // 作用：单轮最多暂存候选条数。
+            // 默认值（插件）：3
+            // 范围（schema）：>= 1
+            maxCandidatesPerTurn: 3,
+
+            // 作用：是否从 assistant 回复中也抽取候选记忆。
+            // 默认值（插件）：false
+            // 开启后行为：会把模型回复中的文本也当作“可沉淀候选”，可能提高“流程结论”沉淀率。
+            // 风险：若回复包含猜测/幻觉/临时表述，可能被错误沉淀（自污染风险上升）。
+            // 建议：只有在回复风格稳定、且有严格审核流程时再开启；常规场景保持 false。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：capture.captureAssistant）
+            captureAssistant: false,
+          },
+
+          indexing: {
+            // 作用：异步索引开关。
+            // 默认值（插件）：true
+            async: true,
+
+            // 作用：每个索引批次处理条数。
+            // 默认值（插件）：16
+            // 范围（schema）：1 ~ 128
+            batchSize: 16,
+
+            // 作用：索引轮询间隔（毫秒）。
+            // 默认值（插件）：3000
+            // 范围（schema）：500 ~ 60000
+            pollMs: 3000,
+
+            // 作用：索引任务失败重试上限。
+            // 默认值（插件）：3
+            // 范围（schema）：0 ~ 20
+            retryLimit: 3,
+          },
+
+          commit: {
+            // 作用：/new 时是否自动提交当前会话暂存记忆。
+            // 默认值（插件）：true
+            onNew: true,
+
+            // 作用：/reset 时是否自动提交当前会话暂存记忆。
+            // 默认值（插件）：true
+            onReset: true,
+
+            // 作用：空闲自动提交阈值（分钟）。0 表示关闭空闲提交。
+            // 默认值（插件）：0
+            // 范围（schema）：>= 0
+            idleMinutes: 0,
+          },
+
+          recall: {
+            // 作用：自动召回开关。
+            // 默认值（插件）：true
+            auto: true,
+
+            // 作用：单次召回最多注入记录数。
+            // 默认值（插件）：4
+            // 范围（schema）：>= 1
+            maxItems: 4,
+
+            // 作用：单次召回文本字符预算。
+            // 默认值（插件）：900
+            // 范围（schema）：>= 64
+            maxChars: 900,
+
+            // 作用：召回层级。
+            // 默认值（插件）："L1"
+            // 可选值："L0" | "L1" | "L2"
+            defaultLevel: "L1",
+          },
+
+          query: {
+            // 作用：混合检索（FTS + 向量）开关。
+            // 默认值（插件）：true
+            // true：先做关键词+向量融合，召回更稳健；false：走单路检索，策略更简单。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.hybrid）
+            hybrid: true,
+
+            // 作用：FTS 权重。
+            // 默认值（插件）：0.35
+            // 范围（schema）：0 ~ 1
+            // 调大影响：关键词精确匹配更强（术语/路径/ID/短语更容易命中）。
+            // 调小影响：语义匹配占比提高，表述不一致时更容易召回。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.ftsWeight）
+            ftsWeight: 0.35,
+
+            // 作用：向量权重。
+            // 默认值（插件）：0.65
+            // 范围（schema）：0 ~ 1
+            // 调大影响：语义相似优先，容忍改写与同义表达；但可能引入语义近邻噪声。
+            // 调小影响：更依赖关键词，结果更“字面匹配”。
+            // 建议：与 ftsWeight 一起调，二者总和建议接近 1。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.vectorWeight）
+            vectorWeight: 0.65,
+
+            // 作用：检索后二次重排开关。
+            // 默认值（插件）：false
+            // true：增加一次排序成本，通常提升 Top-N 质量；false：延迟更低。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.rerank）
+            rerank: false,
+          },
+
+          scopes: {
+            // 作用：启用的作用域集合。
+            // 默认值（插件）：["user","project"]
+            // 可选元素："user" | "project" | "agent"
+            // 语义说明：
+            // - user：跨会话用户长期偏好/个人信息（稳定、可复用）
+            // - project：项目级决策/实体/待办/事件（按项目边界组织）
+            // - agent：代理执行模式/策略模板（偏运行方法论）
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.enabled）
+            enabled: ["user", "project"],
+
+            // 作用：主作用域。
+            // 默认值（插件）："user"
+            // 效果：未显式指定 scope 时，优先写入/查询该作用域。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.primary）
+            primary: "user",
+
+            // 作用：回退作用域。
+            // 默认值（插件）："project"
+            // 效果：主作用域结果不足时，从此作用域补召回。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.fallback）
+            fallback: "project",
+
+            // 作用：是否自动镜像写入多作用域。
+            // 默认值（插件）：false
+            // true：同一条记忆可写入主/回退多个作用域，召回概率更高但重复风险上升。
+            // false：单作用域写入，治理和去重更容易。
+            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.autoMirror）
+            autoMirror: false,
+
+            typeRouting: {
+              // 作用：按“记忆类型”决定默认写入哪个作用域（scope）。
+              // 推荐类型集合：profile | preference | decision | event | todo | entity | pattern | case | other
+              // 决策规则：
+              // - user：跨项目长期个人信息（画像/偏好）
+              // - project：项目共享事实（决策/事件/待办/实体/案例）
+              // - agent：当前 agent 的执行方法模板（SOP）
+              // 兜底建议：可把 "other" 放到 project，避免未分类内容污染 user。
+              // 冲突说明：同一类型不要重复放多个 scope；若重复，当前实现按 user -> project -> agent 顺序命中。
+              // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.typeRouting）
+
+              // 作用：这些类型优先路由到 user 作用域。
+              // 默认值（插件）：["profile","preference"]
+              user: ["profile", "preference"],
+
+              // 作用：这些类型优先路由到 project 作用域。
+              // 默认值（插件）：["decision","event","todo","entity","case"]
+              // 可选补充："other"（建议在 primary=user 时开启）
+              project: ["decision", "event", "todo", "entity", "case"],
+
+              // 作用：这些类型优先路由到 agent 作用域。
+              // 默认值（插件）：["pattern"]
+              agent: ["pattern"],
+            },
+
+            // 作用：是否启用 project 作用域。
+            // 默认值（插件）：true
+            enableProject: true,
+
+            // 作用：是否启用 agent 作用域。
+            // 默认值（插件）：true
+            enableAgent: true,
+          },
+
+          projectResolver: {
+            // 作用：项目解析总开关。
+            // 默认值（插件）：true
+            enabled: true,
+
+            // 作用：项目解析模式。
+            // 默认值（插件）："auto"
+            // 可选值："auto" | "manual" | "workspace" | "git"
+            mode: "auto",
+
+            // 作用：workspace 模式下用于计算项目键的工作区路径。
+            // 默认值（插件）：""
+            workspacePath: "",
+
+            // 作用：manual 模式下固定项目 key。
+            // 默认值（插件）：""
+            manualKey: "",
+
+            // 作用：manual 模式下固定项目显示名。
+            // 默认值（插件）：""
+            manualName: "",
+          },
+
+          ttl: {
+            // 作用：todo 类型默认 TTL（天）。0 表示不过期。
+            // 默认值（插件）：14
+            // 范围（schema）：0 ~ 3650
+            todoDays: 14,
+
+            // 作用：会话类记忆默认 TTL（天）。0 表示不过期。
+            // 默认值（插件）：30
+            // 范围（schema）：0 ~ 3650
+            sessionDays: 30,
+
+            // 作用：自动过期清理开关。
+            // 默认值（插件）：true
+            autoCleanup: true,
+
+            // 作用：自动清理轮询间隔（毫秒）。
+            // 默认值（插件）：60000
+            // 范围（schema）：5000 ~ 86400000
+            cleanupPollMs: 60000,
+
+            // 作用：过期后物理删除等待期（天）。0 表示到期可立即物理删除。
+            // 默认值（插件）：30
+            // 范围（schema）：0 ~ 3650
+            purgeAfterDays: 30,
+          },
+        },
+      },
+    },
+  },
+}

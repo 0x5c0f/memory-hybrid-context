@@ -1,0 +1,736 @@
+{
+  "generatedAt": 1772516292441,
+  "filters": {
+    "scope": "",
+    "sessionId": "",
+    "type": "",
+    "status": "all",
+    "includeSessions": false
+  },
+  "summary": {
+    "auditedRecords": 29,
+    "recordIssues": 0,
+    "affectedRecords": 0,
+    "orphanIndexes": 0,
+    "missingRecordJobs": 0,
+    "staleRunningJobs": 0,
+    "failedJobs": 0,
+    "archiveIssues": 0,
+    "quarantinedFiles": 1,
+    "annHealthLevel": "warn"
+  },
+  "records": {
+    "limit": 50,
+    "summary": {
+      "total": 29,
+      "ok": 29,
+      "issueCount": 0,
+      "affectedRecords": 0
+    },
+    "results": [
+      {
+        "id": "b6725198-2790-42fe-ba14-7bb32c3f135d",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "entity",
+        "status": "superseded",
+        "title": "实体: API 地址是 v2",
+        "sessionId": "entity-merge-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-实体-api-地址是-v2.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "029bebd7-2b68-4288-8ae5-acae58692ae9",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "entity",
+        "status": "active",
+        "title": "实体: API 地址是 v3",
+        "sessionId": "entity-merge-3",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-实体-api-地址是-v3.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "2dec0a45-e3a4-4566-86fc-69b657212df5",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "event",
+        "status": "active",
+        "title": "事件: 服务部署完成",
+        "sessionId": "event-merge-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-事件-服务部署完成.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "7eecdd64-1c9f-48d6-829c-020ac465c555",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "entity",
+        "status": "active",
+        "title": "实体: API 地址是 v1",
+        "sessionId": "entity-merge-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-实体-api-地址是-v1.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "dcefc78a-1617-420c-8f6a-30ef2618e82e",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "superseded",
+        "title": "决策: 保留 idle commit",
+        "sessionId": "merge-idle-check-3",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留-idle-commit.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "ce64637d-b509-4937-8db6-17b5391db0c0",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 保留 idle commit",
+        "sessionId": "merge-idle-check-4",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留-idle-commit.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "10c80ac1-cc40-411f-8bcb-09c1c37501e6",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "superseded",
+        "title": "决策: 后续继续保留 idle commit",
+        "sessionId": "idle-test-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-后续继续保留-idle-commit.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "75ba513d-f790-402b-a9e4-1c3a50c14387",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 后续继续保留 merge-check",
+        "sessionId": "merge-check-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-后续继续保留-merge-check.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "a2007f1c-470b-4ebb-8d4f-c925bb5c52f8",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 保留 merge-check",
+        "sessionId": "merge-check-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留-merge-check.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "d6a46843-8039-4c18-9d43-839da33ee666",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 后续继续保留 merge-check-b2",
+        "sessionId": "merge-check-b2-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-后续继续保留-merge-check-b2.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "330514e9-55c5-4ca9-9d6b-d45424d97e8a",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 保留 merge-check-b2",
+        "sessionId": "merge-check-b2-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留-merge-check-b2.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "03b14079-1c27-4891-9ae3-851d51a37371",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 保留 idle commit",
+        "sessionId": "merge-idle-check",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留-idle-commit.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "001b53ef-fd22-4762-9bba-5e70d43ad18c",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 后续继续保留 immediate-expire-check",
+        "sessionId": "expire-probe-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-后续继续保留-immediate-expire-check.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "dc9b7b6a-0300-43b7-8884-becf55f12915",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 后续继续保留 post-fix-expire-check",
+        "sessionId": "expire-probe-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-后续继续保留-post-fix-expire-check.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "2ce22d31-dd17-4a68-937d-cbbe4f4ab5a4",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 保留 idle commit",
+        "sessionId": "merge-idle-check-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留-idle-commit.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "20bd88d9-23c2-4405-b06e-303f48f31162",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "todo",
+        "status": "active",
+        "title": "待办: 恢复这条待办",
+        "sessionId": "restore-test-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-待办-恢复这条待办.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "353a1f11-b812-4973-88ee-d15c7b78b487",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 确认原生 sqlite-vec 函数模式已经启用",
+        "sessionId": "native-vec-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-确认原生-sqlite-vec-函数模式已经启用.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "7ceb0fb2-4f25-4065-a979-d91fd0da4ad7",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 确认后台索引消费器已经接管队列",
+        "sessionId": "async-index-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-确认后台索引消费器已经接管队列.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "bd71ed73-7e6f-411e-abcf-e2f6911ed66a",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 采用异步索引消费器",
+        "sessionId": "async-index-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-采用异步索引消费器.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "09e7d030-0d1b-4d4f-8f96-5ff4fdd0764b",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 需要索引作业队列来支持中规模扩展",
+        "sessionId": "index-job-test-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-需要索引作业队列来支持中规模扩展.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "e82224f2-60db-4188-8840-cb412b502870",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 保留混合检索并优先使用本地哈希向量",
+        "sessionId": "vector-local-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-保留混合检索并优先使用本地哈希向量.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "2b3c9ff9-a958-438e-b93e-34842b28305d",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "决策: 继续使用 sqlite-vec 作为第一版向量方案",
+        "sessionId": "auto-layer-decision",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-决策-继续使用-sqlite-vec-作为第一版向量方案.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "85050a78-ca47-4b2c-b96e-08da1269ef22",
+        "scope": "mem://user/default",
+        "type": "preference",
+        "status": "superseded",
+        "title": "以后默认先给结论再给细节。",
+        "sessionId": "cli-manual-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-以后默认先给结论再给细节.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": false,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "80d968b2-243c-4aeb-8722-23e2d5bf81de",
+        "scope": "mem://user/default",
+        "type": "preference",
+        "status": "active",
+        "title": "偏好: 中文简体输出",
+        "sessionId": "auto-layer-pref",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-偏好-中文简体输出.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "3b8dc3be-4cc0-4666-9ed0-1a8dcc2aaf5e",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "归档分层验证",
+        "sessionId": "cli-layered-3",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-归档分层验证.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "abdf2212-f9c4-4d1f-882a-98667c946616",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "分层验证",
+        "sessionId": "cli-layered-2",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-记忆插件分层验证.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "5c2d9ec5-e601-4956-bc09-02f8c9322b59",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "当前插件的真实分层存储已经启用。",
+        "sessionId": "cli-layered-1",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-当前插件的真实分层存储已经启用.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "7941c783-bebe-42bc-ab47-39b43b50f7f8",
+        "scope": "mem://user/default",
+        "type": "preference",
+        "status": "superseded",
+        "title": "我喜欢默认用中文简体输出。",
+        "sessionId": "validation-e2e-20260302",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-我喜欢默认用中文简体输出.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": false,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      },
+      {
+        "id": "9af1dfd8-3656-4796-9c92-fe87bd5c60ae",
+        "scope": "mem://project/fa23de0d-c4b4-4d03-86b3-da0417267d19",
+        "type": "decision",
+        "status": "active",
+        "title": "这个项目决定继续使用 memory-hybrid-context 作为主记忆方案。",
+        "sessionId": "validation-e2e-20260302",
+        "sourcePath": "/home/cxd/.openclaw/workspace/.memory-hybrid/2026-03-02-这个项目决定继续使用-memory-hybrid-context-作为主记忆方案.md",
+        "vectorBackend": "ann-local",
+        "indexStatus": "indexed",
+        "indexArtifacts": {
+          "fts": true,
+          "nativeVector": true,
+          "annBuckets": 6
+        },
+        "jobs": {
+          "pending": 0,
+          "running": 0,
+          "failed": 0
+        },
+        "issues": []
+      }
+    ]
+  },
+  "orphans": {
+    "limit": 50,
+    "summary": {
+      "fts": 0,
+      "nativeVectors": 0,
+      "ann": 0,
+      "total": 0
+    },
+    "fts": [],
+    "nativeVectors": [],
+    "ann": []
+  },
+  "jobs": {
+    "limit": 50,
+    "summary": {
+      "missingRecord": 0,
+      "staleRunning": 0,
+      "failed": 0,
+      "pendingWithoutRecord": 0
+    },
+    "missingRecord": [],
+    "staleRunning": [],
+    "failed": []
+  },
+  "archive": {
+    "summary": {
+      "linkedRecordsAudited": 29,
+      "linkedIssues": 0,
+      "orphanedFiles": 0,
+      "quarantinedFiles": 1,
+      "annHealthLevel": "warn"
+    }
+  },
+  "vectorHealth": {
+    "backend": "ann-local",
+    "mode": "ann-local-lsh",
+    "level": "warn",
+    "score": 80,
+    "tuning": {
+      "action": "keep",
+      "currentProbePerBand": 1,
+      "recommendedProbePerBand": 1,
+      "reason": "当前 probe 配置可继续维持。"
+    },
+    "warnings": [
+      "热点桶偏热，桶分布开始不均衡。"
+    ],
+    "suggestions": [
+      "继续观察热点桶；如果命中偏斜，考虑调高 probe 或优化分桶。"
+    ],
+    "metrics": {
+      "indexedRecords": 29,
+      "bucketRows": 174,
+      "uniqueBuckets": 94,
+      "avgBucketsPerRecord": 6,
+      "probePerBand": 1,
+      "approxQueryBuckets": 10,
+      "hottestBucket": {
+        "bucketKey": "s0:dff7",
+        "recordCount": 11
+      },
+      "hottestBucketRatio": 0.3793,
+      "bucketCoverage": 3.2414
+    }
+  }
+}
