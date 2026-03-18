@@ -105,8 +105,9 @@
 
 1. `plugins.entries.memory-hybrid-context.enabled = true`
 2. `plugins.entries.memory-hybrid-context.config.enabled = true`
-3. `plugins.slots.memory = "none"`
-   - 避免默认 memory slot 与当前插件并行接管
+3. `plugins.slots.memory = "memory-hybrid-context"`
+   - 将 memory 独占 slot 指向本插件
+   - 避免与 `memory-core` / `memory-lancedb` 并行接管
 
 4. `hooks.internal.entries.session-memory.enabled = false`
    - 必须关闭官方旧会话归档 hook
@@ -135,7 +136,7 @@
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {

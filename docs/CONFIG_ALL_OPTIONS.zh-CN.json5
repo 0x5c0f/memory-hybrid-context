@@ -30,10 +30,11 @@
     ],
 
     slots: {
-      // 作用：关闭默认 memory slot，避免默认记忆链路与本插件并行。
-      // 默认值（OpenClaw）：由宿主版本决定，通常不是 "none"
-      // 推荐值（使用本插件时）："none"
-      memory: "none",
+      // 作用：选择 memory 独占 slot 的接管插件。
+      // 默认值（OpenClaw）：由宿主版本决定（常见为 memory-core）
+      // 推荐值（使用本插件时）："memory-hybrid-context"
+      // 注意：如果设为 "none"，所有 memory-kind 插件都会被禁用。
+      memory: "memory-hybrid-context",
     },
 
     entries: {

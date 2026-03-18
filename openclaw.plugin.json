@@ -1,5 +1,6 @@
 {
   "id": "memory-hybrid-context",
+  "kind": "memory",
   "uiHints": {
     "enabled": {
       "label": "Enabled"
@@ -35,6 +36,11 @@
     "store.vector.embedding.model": {
       "label": "Embedding Model",
       "advanced": true
+    },
+    "store.vector.embedding.apiKey": {
+      "label": "Embedding API Key",
+      "advanced": true,
+      "sensitive": true
     },
     "store.vector.embedding.apiKeyEnv": {
       "label": "Embedding API Key Env",

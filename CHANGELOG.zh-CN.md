@@ -59,6 +59,14 @@
 3. `openclaw mhm migrate-session-memory`
    - 一键执行“解析旧 Markdown + 导入插件记忆库”（支持 `--dry-run`）
 
+### 6. 官方 memory slot 对齐
+
+为对齐 OpenClaw 插件规范，本插件增加了 `kind: "memory"` 声明（manifest + runtime）。
+
+1. 好处：由 `plugins.slots.memory` 统一选择 memory 插件，避免并行接管。
+2. 配置迁移：`plugins.slots.memory` 需改为 `"memory-hybrid-context"`。
+3. 注意：若仍为 `"none"`，memory-kind 插件不会加载。
+
 ## 2026-03-03 第一阶段完成版
 
 这是当前的第一阶段完成基线。插件已经可以作为 OpenClaw 的主记忆插件使用。

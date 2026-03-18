@@ -75,7 +75,7 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {
@@ -95,9 +95,10 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
    - 关闭官方旧归档 hook
    - 否则会继续往旧路径写文件，和当前插件冲突
 
-2. `plugins.slots.memory = "none"`
-   - 禁用默认 memory slot
-   - 避免双重记忆链路叠加
+2. `plugins.slots.memory = "memory-hybrid-context"`
+   - 让本插件接管 memory 独占 slot
+   - 避免与 `memory-core` / `memory-lancedb` 双重链路叠加
+   - 如果仍为 `"none"`，本插件会因 memory slot 未选中而不加载
 
 3. `plugins.entries.memory-hybrid-context.config.enabled = true`
    - 这是插件内部真正启用位
@@ -139,7 +140,7 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {

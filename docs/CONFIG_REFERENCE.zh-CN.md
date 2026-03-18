@@ -55,16 +55,16 @@
 
 1. 层级：OpenClaw 外层
 2. 类型：`string`
-3. 推荐值：`"none"`
+3. 推荐值：`"memory-hybrid-context"`
 4. 是否必填：是（本插件场景）
-5. 作用：禁用默认 memory slot
-6. 风险：若不设为 `none`，可能与默认记忆链路并行工作
+5. 作用：把 memory 独占 slot 指向本插件
+6. 风险：若设为 `"none"`，所有 memory-kind 插件都不会加载；若设为其他 memory 插件 id，本插件不会接管
 
 示例：
 ```json
 "plugins": {
   "slots": {
-    "memory": "none"
+    "memory": "memory-hybrid-context"
   }
 }
 ```
@@ -706,7 +706,7 @@
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {
@@ -761,7 +761,7 @@
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {
@@ -839,7 +839,7 @@
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {
@@ -901,7 +901,7 @@
       "memory-hybrid-context"
     ],
     "slots": {
-      "memory": "none"
+      "memory": "memory-hybrid-context"
     },
     "entries": {
       "memory-hybrid-context": {

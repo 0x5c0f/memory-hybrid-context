@@ -2563,6 +2563,7 @@ const plugin = {
   name: "Memory Hybrid Context",
   version: "0.1.0",
   description: "Layered dual-track memory plugin.",
+  kind: "memory",
   register(api) {
     const cfg = mergeConfig(api.pluginConfig);
     const summary = summarizeConfig(cfg);
