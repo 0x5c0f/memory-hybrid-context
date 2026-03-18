@@ -70,6 +70,11 @@
    - `consistency-report`
    - `consistency-repair`
 
+9. 单网关多 agent 强隔离（`v0.2.0`）
+   - 结构化主库按 `agent_id` 硬隔离
+   - 归档按 `<archive.dir>/<agentId>/...` 分桶
+   - 工具调用通过 `before_tool_call` 自动注入 `agentId`
+
 ## 主要优点
 
 1. 本地优先
@@ -96,6 +101,7 @@
 4. 需要正确关闭冲突项，否则会和旧链路重复工作
 5. 需要你的模型提供方可正常工作，否则对话本身失败会影响你观察记忆效果
 6. 如果是“中途启用插件”，旧 `workspace/memory/*.md` 不会自动回灌，需要执行迁移脚本（见 `docs/OPERATIONS.zh-CN.md`）
+7. 多 agent 运行时，如果你选择 `isolation.mode = global`，会退回全局共享记忆模型（兼容模式）
 
 ## 部署前必须知道的冲突项
 
@@ -184,13 +190,16 @@
 5. [OPERATIONS.zh-CN.md](./docs/OPERATIONS.zh-CN.md)
    - 后续运维、排障、巡检
 
-6. [RELEASE_STRATEGY.zh-CN.md](./docs/RELEASE_STRATEGY.zh-CN.md)
+6. [AGENT_ISOLATION_DESIGN.zh-CN.md](./docs/AGENT_ISOLATION_DESIGN.zh-CN.md)
+   - 单网关强隔离实现说明与设计取舍（`v0.2.0`）
+
+7. [RELEASE_STRATEGY.zh-CN.md](./docs/RELEASE_STRATEGY.zh-CN.md)
    - 查看正式发布、快照归档和 `latest` 包策略
 
-7. [RELEASE_CHECKLIST.zh-CN.md](./docs/RELEASE_CHECKLIST.zh-CN.md)
+8. [RELEASE_CHECKLIST.zh-CN.md](./docs/RELEASE_CHECKLIST.zh-CN.md)
    - 每次变更后快速验收
 
-8. [CHANGELOG.zh-CN.md](./CHANGELOG.zh-CN.md)
+9. [CHANGELOG.zh-CN.md](./CHANGELOG.zh-CN.md)
    - 看版本演进
 
 ## 当前基线归档

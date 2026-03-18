@@ -7,14 +7,15 @@ class ConsistencyManager {
 
   getRecordRows(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(500, Math.floor(Number(params.limit) || 50)));
     const searchStatus = this.deps.normalizeSearchStatus(params.status) || "all";
     const scope = this.deps.normalizeText(params.scope);
     const sessionId = this.deps.normalizeText(params.sessionId);
     const memoryType = this.deps.normalizeText(params.type).toLowerCase();
 
-    const clauses = [];
-    const values = [];
+    const clauses = ["agent_id = ?"];
+    const values = [agentId];
     if (scope) {
       clauses.push("scope = ?");
       values.push(scope);
@@ -36,7 +37,7 @@ class ConsistencyManager {
     return conn
       .prepare(
         `SELECT id, scope, type, status, title, summary, session_id, source_path,
-                vector_backend, index_status, created_at, updated_at, expires_at, expired_at
+                vector_backend, index_status, created_at, updated_at, expires_at, expired_at, agent_id
            FROM memory_records
            ${whereClause}
           ORDER BY updated_at DESC
@@ -45,12 +46,13 @@ class ConsistencyManager {
       .all(...values, limit);
   }
 
-  buildJobStateMap(conn, recordIds) {
+  buildJobStateMap(conn, recordIds, rawAgentId) {
     const ids = Array.isArray(recordIds) ? recordIds.filter(Boolean) : [];
     const out = new Map();
     if (ids.length === 0) {
       return out;
     }
+    const agentId = this.deps.resolveAgentId(rawAgentId);
     const placeholders = ids.map(() => "?").join(", ");
     const rows = conn
       .prepare(
@@ -59,10 +61,11 @@ class ConsistencyManager {
                 SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) AS running_jobs,
                 SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_jobs
            FROM index_jobs
-          WHERE record_id IN (${placeholders})
+          WHERE agent_id = ?
+            AND record_id IN (${placeholders})
           GROUP BY record_id`,
       )
-      .all(...ids);
+      .all(agentId, ...ids);
     for (const row of rows) {
       out.set(row.record_id, {
         pending: Number(row.pending_jobs) || 0,
@@ -75,9 +78,10 @@ class ConsistencyManager {
 
   auditRecordConsistency(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const rows = this.getRecordRows(params);
     const recordIds = rows.map((row) => row.id);
-    const jobStates = this.buildJobStateMap(conn, recordIds);
+    const jobStates = this.buildJobStateMap(conn, recordIds, agentId);
     const vectorInfo = this.deps.getVectorInfo();
 
     const ftsStmt = conn.prepare("SELECT 1 FROM memory_fts_docs WHERE id = ? LIMIT 1");
@@ -124,6 +128,7 @@ class ConsistencyManager {
 
       return {
         id: row.id,
+        agentId: row.agent_id || agentId,
         scope: row.scope,
         type: row.type,
         status,
@@ -143,6 +148,7 @@ class ConsistencyManager {
     });
 
     return {
+      agentId,
       limit: Math.max(1, Math.min(500, Math.floor(Number(params.limit) || 50))),
       summary: {
         total: results.length,
@@ -210,6 +216,7 @@ class ConsistencyManager {
 
   auditJobConsistency(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(500, Math.floor(Number(params.limit) || 50)));
     const staleThreshold = Date.now() - Math.max(30000, this.deps.getIndexingPollMs() * 4);
 
@@ -217,11 +224,16 @@ class ConsistencyManager {
       .prepare(
         `SELECT id, record_id, status, job_type, backend, attempts, updated_at
            FROM index_jobs
-          WHERE record_id NOT IN (SELECT id FROM memory_records)
+          WHERE agent_id = ?
+            AND record_id NOT IN (
+              SELECT id
+                FROM memory_records
+               WHERE agent_id = ?
+            )
           ORDER BY updated_at DESC
           LIMIT ?`,
       )
-      .all(limit)
+      .all(agentId, agentId, limit)
       .map((row) => ({
         id: row.id,
         recordId: row.record_id,
@@ -236,13 +248,14 @@ class ConsistencyManager {
       .prepare(
         `SELECT id, record_id, status, job_type, backend, attempts, started_at, updated_at
            FROM index_jobs
-          WHERE status = 'running'
+          WHERE agent_id = ?
+            AND status = 'running'
             AND started_at IS NOT NULL
             AND started_at <= ?
           ORDER BY started_at ASC
           LIMIT ?`,
       )
-      .all(staleThreshold, limit)
+      .all(agentId, staleThreshold, limit)
       .map((row) => ({
         id: row.id,
         recordId: row.record_id,
@@ -258,11 +271,12 @@ class ConsistencyManager {
       .prepare(
         `SELECT id, record_id, status, job_type, backend, attempts, last_error, updated_at
            FROM index_jobs
-          WHERE status = 'failed'
+          WHERE agent_id = ?
+            AND status = 'failed'
           ORDER BY updated_at DESC
           LIMIT ?`,
       )
-      .all(limit)
+      .all(agentId, limit)
       .map((row) => ({
         id: row.id,
         recordId: row.record_id,
@@ -278,12 +292,18 @@ class ConsistencyManager {
       .prepare(
         `SELECT COUNT(*) AS total
            FROM index_jobs
-          WHERE status IN ('pending', 'running')
-            AND record_id NOT IN (SELECT id FROM memory_records)`,
+          WHERE agent_id = ?
+            AND status IN ('pending', 'running')
+            AND record_id NOT IN (
+              SELECT id
+                FROM memory_records
+               WHERE agent_id = ?
+            )`,
       )
-      .get();
+      .get(agentId, agentId);
 
     return {
+      agentId,
       limit,
       summary: {
         missingRecord: missingRecord.length,
@@ -298,11 +318,13 @@ class ConsistencyManager {
   }
 
   getConsistencyReport(params = {}) {
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const recordLimit = Math.max(1, Math.min(500, Math.floor(Number(params.recordLimit || params.limit) || 50)));
     const orphanLimit = Math.max(1, Math.min(5000, Math.floor(Number(params.orphanLimit || params.limit) || 100)));
     const jobLimit = Math.max(1, Math.min(500, Math.floor(Number(params.jobLimit || params.limit) || 50)));
 
     const records = this.auditRecordConsistency({
+      agentId,
       scope: params.scope,
       sessionId: params.sessionId,
       type: params.type,
@@ -313,9 +335,11 @@ class ConsistencyManager {
       limit: orphanLimit,
     });
     const jobs = this.auditJobConsistency({
+      agentId,
       limit: jobLimit,
     });
     const archive = this.deps.getArchiveAuditReport({
+      agentId,
       scope: params.scope,
       sessionId: params.sessionId,
       type: params.type,
@@ -330,6 +354,7 @@ class ConsistencyManager {
     return {
       generatedAt: Date.now(),
       filters: {
+        agentId,
         scope: this.deps.normalizeText(params.scope),
         sessionId: this.deps.normalizeText(params.sessionId),
         type: this.deps.normalizeText(params.type),
@@ -346,7 +371,7 @@ class ConsistencyManager {
         failedJobs: jobs.summary.failed,
         archiveIssues: Number((archive.summary && archive.summary.linkedIssues) || 0),
         quarantinedFiles: Number((archive.summary && archive.summary.quarantinedFiles) || 0),
-        annHealthLevel: this.deps.getVectorHealth().level || "unknown",
+        annHealthLevel: this.deps.getVectorHealth(agentId).level || "unknown",
       },
       records,
       orphans,
@@ -354,7 +379,7 @@ class ConsistencyManager {
       archive: {
         summary: archive.summary,
       },
-      vectorHealth: this.deps.getVectorHealth(),
+      vectorHealth: this.deps.getVectorHealth(agentId),
     };
   }
 
@@ -389,6 +414,7 @@ class ConsistencyManager {
       "",
       "## Filters",
       "",
+      `- Agent: ${filters.agentId || "(default)"}`,
       `- Scope: ${filters.scope || "(all)"}`,
       `- Session: ${filters.sessionId || "(all)"}`,
       `- Type: ${filters.type || "(all)"}`,
@@ -456,9 +482,13 @@ class ConsistencyManager {
 
   repairConsistency(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const dryRun = params.dryRun === true;
     const retryFailed = params.retryFailed === true;
-    const audit = this.getConsistencyReport(params);
+    const audit = this.getConsistencyReport({
+      ...params,
+      agentId,
+    });
     const now = Date.now();
 
     const recordsToRequeue = [];
@@ -499,6 +529,7 @@ class ConsistencyManager {
     if (dryRun) {
       return {
         dryRun: true,
+        agentId,
         retryFailed,
         summary: {
           requeueRecords: recordsToRequeue.length,
@@ -522,11 +553,12 @@ class ConsistencyManager {
           .prepare(
             `SELECT 1
                FROM index_jobs
-              WHERE record_id = ?
+              WHERE agent_id = ?
+                AND record_id = ?
                 AND status IN ('pending', 'running')
               LIMIT 1`,
           )
-          .get(entry.id) || null;
+          .get(agentId, entry.id) || null;
 
       conn
         .prepare(
@@ -534,12 +566,14 @@ class ConsistencyManager {
               SET index_status = 'pending',
                   indexed_at = NULL,
                   updated_at = updated_at
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(entry.id);
+        .run(entry.id, agentId);
 
       if (!pending) {
         this.deps.recordIndexJob({
+          agentId,
           recordId: entry.id,
           jobType: "reindex",
           backend: this.deps.getVectorInfo().backend,
@@ -568,9 +602,10 @@ class ConsistencyManager {
                   END,
                   indexed_at = NULL,
                   updated_at = updated_at
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(entry.id);
+        .run(entry.id, agentId);
       cleanedInactive += 1;
     }
 
@@ -583,10 +618,21 @@ class ConsistencyManager {
       return Number(result && result.changes) || 0;
     };
 
+    const deleteJobByIds = (ids) => {
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return 0;
+      }
+      const placeholders = ids.map(() => "?").join(", ");
+      const result = conn
+        .prepare(`DELETE FROM index_jobs WHERE agent_id = ? AND id IN (${placeholders})`)
+        .run(agentId, ...ids);
+      return Number(result && result.changes) || 0;
+    };
+
     const purgedOrphanFts = deleteByIds("memory_fts_docs", "id", orphanFtsIds);
     const purgedOrphanVectors = deleteByIds("memory_vector_blobs", "record_id", orphanVectorIds);
     const purgedOrphanAnn = deleteByIds("memory_ann_buckets", "record_id", orphanAnnIds);
-    const droppedMissingRecordJobs = deleteByIds("index_jobs", "id", orphanJobIds);
+    const droppedMissingRecordJobs = deleteJobByIds(orphanJobIds);
 
     let resetStaleJobs = 0;
     if (staleJobIds.length > 0) {
@@ -598,9 +644,10 @@ class ConsistencyManager {
                   available_at = ?,
                   started_at = NULL,
                   updated_at = ?
-            WHERE id IN (${placeholders})`,
+            WHERE agent_id = ?
+              AND id IN (${placeholders})`,
         )
-        .run(now, now, ...staleJobIds);
+        .run(now, now, agentId, ...staleJobIds);
       resetStaleJobs = Number(result && result.changes) || 0;
     }
 
@@ -616,14 +663,16 @@ class ConsistencyManager {
                   completed_at = NULL,
                   last_error = NULL,
                   updated_at = ?
-            WHERE id IN (${placeholders})`,
+            WHERE agent_id = ?
+              AND id IN (${placeholders})`,
         )
-        .run(now, now, ...failedJobIds);
+        .run(now, now, agentId, ...failedJobIds);
       retriedFailedJobs = Number(result && result.changes) || 0;
     }
 
     return {
       dryRun: false,
+      agentId,
       retryFailed,
       summary: {
         requeued,

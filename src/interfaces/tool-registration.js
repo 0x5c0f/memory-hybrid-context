@@ -32,6 +32,15 @@ function registerMemoryTools({
     emptyParamsSchema,
   } = schemas;
 
+  const activateAgentContext = (params = {}) => {
+    const agentId = runtime.resolveAgentId(params.agentId);
+    runtime.setActiveAgentContext({
+      agentId,
+      sessionId: normalizeText(params.sessionId),
+    });
+    return agentId;
+  };
+
   api.registerTool(
     {
       name: "memory_commit",
@@ -39,7 +48,13 @@ function registerMemoryTools({
       description:
         "Commit a structured long-term memory entry into the layered dual-track memory store.",
       parameters: commitParamsSchema,
-      execute: async (_toolCallId, params) => runCommit(params),
+      execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
+        return runCommit({
+          ...(params || {}),
+          agentId,
+        });
+      },
     },
     { name: "memory_commit" },
   );
@@ -52,7 +67,9 @@ function registerMemoryTools({
         "Search committed memories using the local structured store and FTS index.",
       parameters: searchParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const results = runtime.searchRecords({
+          agentId,
           query: params.query,
           limit: params.limit,
           scopes: params.scope ? [normalizeText(params.scope)] : runtime.resolvePreferredScopes("", ""),
@@ -91,7 +108,8 @@ function registerMemoryTools({
         "Read a committed memory record, including archive content when available.",
       parameters: getParamsSchema,
       execute: async (_toolCallId, params) => {
-        const record = runtime.getRecordById(normalizeText(params.id));
+        const agentId = activateAgentContext(params || {});
+        const record = runtime.getRecordById(normalizeText(params.id), { agentId });
         if (!record) {
           return {
             content: [{ type: "text", text: "未找到对应的记忆记录。" }],
@@ -126,7 +144,9 @@ function registerMemoryTools({
         "List committed memory records using governance-friendly filters without requiring a query string.",
       parameters: listParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const results = runtime.listRecords({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -163,7 +183,9 @@ function registerMemoryTools({
         "Audit whether database-linked archive files exist and are stored under the managed archive root.",
       parameters: listParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.auditArchiveRecords({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -195,7 +217,9 @@ function registerMemoryTools({
         "Repair missing or unmanaged archive links by regenerating archive files from stored records.",
       parameters: archiveRepairParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.repairArchiveRecords({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -230,7 +254,9 @@ function registerMemoryTools({
         "Scan managed archive markdown files that are not linked by any memory record.",
       parameters: archiveOrphanParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.auditOrphanArchiveFiles({
+          agentId,
           limit: params.limit,
           includeSessions: params.includeSessions === true,
         });
@@ -259,7 +285,9 @@ function registerMemoryTools({
         "Move orphan archive markdown files into the managed quarantine directory.",
       parameters: archiveOrphanParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.quarantineOrphanArchiveFiles({
+          agentId,
           limit: params.limit,
           includeSessions: params.includeSessions === true,
           dryRun: params.dryRun === true,
@@ -291,7 +319,9 @@ function registerMemoryTools({
         "List markdown files currently stored in the managed archive quarantine directory.",
       parameters: archiveQuarantineListParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.listQuarantinedArchiveFiles({
+          agentId,
           limit: params.limit,
         });
         return {
@@ -319,7 +349,9 @@ function registerMemoryTools({
         "Restore quarantined archive markdown files back into the managed archive root.",
       parameters: archiveQuarantineRestoreParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.restoreQuarantinedArchiveFiles({
+          agentId,
           limit: params.limit,
           paths: params.paths,
           dryRun: params.dryRun === true,
@@ -351,7 +383,9 @@ function registerMemoryTools({
         "Permanently delete markdown files stored in the managed archive quarantine directory.",
       parameters: archiveQuarantinePurgeParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.purgeQuarantinedArchiveFiles({
+          agentId,
           limit: params.limit,
           paths: params.paths,
           dryRun: params.dryRun === true,
@@ -383,7 +417,9 @@ function registerMemoryTools({
         "Generate a unified archive governance report combining linked archive issues, orphan files, and quarantine files.",
       parameters: archiveReportParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.getArchiveAuditReport({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -417,7 +453,9 @@ function registerMemoryTools({
         "Generate a unified consistency audit across records, indexes, jobs, archive state, and ann-local health.",
       parameters: consistencyReportParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.getConsistencyReport({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -451,7 +489,9 @@ function registerMemoryTools({
         "Repair safe consistency issues by requeueing missing indexes, cleaning orphan index rows, and recovering stuck jobs.",
       parameters: consistencyRepairParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.repairConsistency({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -489,7 +529,9 @@ function registerMemoryTools({
         "Export filtered memory records as JSON or Markdown for audit and migration.",
       parameters: exportParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.exportRecords({
+          agentId,
           scope: params.scope,
           sessionId: params.sessionId,
           type: params.type,
@@ -520,7 +562,9 @@ function registerMemoryTools({
         "Import memory records from exported JSON payloads using the current merge and indexing pipeline.",
       parameters: importParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.importRecords({
+          agentId,
           payload: params.payload,
           format: params.format,
           limit: params.limit,
@@ -557,7 +601,9 @@ function registerMemoryTools({
       description: "List staged memory candidates before they are committed.",
       parameters: stageListParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const results = runtime.listStagedCandidates({
+          agentId,
           sessionId: normalizeText(params.sessionId),
           limit: params.limit,
         });
@@ -590,7 +636,9 @@ function registerMemoryTools({
       description: "List staged sessions that are eligible for idle commit.",
       parameters: idleParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const results = runtime.listIdleStageSessions({
+          agentId,
           idleMinutes: params.idleMinutes,
           limit: params.limit,
         });
@@ -621,7 +669,9 @@ function registerMemoryTools({
       description: "Commit staged candidates for sessions that have been idle for long enough.",
       parameters: idleParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.commitIdleSessions({
+          agentId,
           idleMinutes: params.idleMinutes,
           limit: params.limit,
         });
@@ -649,7 +699,9 @@ function registerMemoryTools({
       description: "Delete staged memory candidates by ids or by session.",
       parameters: stageDropParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const removed = runtime.dropStagedCandidates({
+          agentId,
           ids: Array.isArray(params.ids) ? params.ids : [],
           sessionId: normalizeText(params.sessionId),
         });
@@ -669,7 +721,9 @@ function registerMemoryTools({
       description:
         "Show counts for committed records, staged candidates, and commit operations.",
       parameters: emptyParamsSchema,
-      execute: async () => ({
+      execute: async (_toolCallId, params = {}) => {
+        const agentId = activateAgentContext(params || {});
+        return ({
         content: [
           {
             type: "text",
@@ -688,15 +742,16 @@ function registerMemoryTools({
           breakdown: runtime.getBreakdownSnapshot(),
           indexing: runtime.getIndexStats(),
           storePath: runtime.getStorePath(),
-          archiveDir: runtime.getArchiveDir(),
+          archiveDir: runtime.getArchiveDir(agentId),
           vector: runtime.getVectorInfo(),
-          vectorStats: runtime.getVectorStats(),
-          vectorHealth: runtime.getVectorHealth(),
+          vectorStats: runtime.getVectorStats({ agentId }),
+          vectorHealth: runtime.getVectorHealth({ agentId }),
           policy: runtime.getPolicySnapshot(),
           currentProject: runtime.getCurrentProject(),
           activeProjectOverride: runtime.getProjectOverride(),
         },
-      }),
+      });
+      },
     },
     { name: "memory_stats" },
   );
@@ -709,7 +764,9 @@ function registerMemoryTools({
         "Soft-delete active records from search and recall while keeping the main record for audit.",
       parameters: forgetParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.forgetRecords({
+          agentId,
           ids: Array.isArray(params.ids) ? params.ids : [],
           sessionId: params.sessionId,
           scope: params.scope,
@@ -739,7 +796,9 @@ function registerMemoryTools({
         "Restore expired records back to active state and queue them for reindexing.",
       parameters: restoreParamsSchema,
       execute: async (_toolCallId, params) => {
+        const agentId = activateAgentContext(params || {});
         const result = runtime.restoreExpiredRecords({
+          agentId,
           ids: Array.isArray(params.ids) ? params.ids : [],
           sessionId: params.sessionId,
           scope: params.scope,

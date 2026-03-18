@@ -22,6 +22,32 @@ openclaw mhm project current
 3. `indexing.pending` 是否长期堆积
 4. 当前项目绑定是否符合预期
 
+### `projectResolver` 专项巡检
+
+当你怀疑 `project` 作用域不生效、项目记忆串线或项目名不对时，执行：
+
+```bash
+openclaw mhm project current
+openclaw mhm project list
+```
+
+常见判读：
+
+1. `currentProject = null`：当前项目未解析成功，优先检查 `projectResolver.mode/manualKey/workspacePath`
+2. `activeOverride` 有值：当前使用的是手动覆盖（优先级高于自动解析）
+3. `currentProject.source`：
+   - `manual`：来自 `manualKey` 或 `project use`
+   - `git`：来自 git 根目录/remote
+   - `workspace`：来自工作区路径
+
+手动校正命令：
+
+```bash
+openclaw mhm project use <key> --name "<name>"
+openclaw mhm project bind "<name>"
+openclaw mhm project clear
+```
+
 ## 2. 网关与插件加载问题
 
 如果怀疑插件未生效：
@@ -53,17 +79,27 @@ openclaw mhm list --status all --limit 20
 openclaw mhm stage-list --limit 20
 ```
 
-3. 手动提交暂存
+3. 看暂存统计（确认是否有可提交候选）
+```bash
+openclaw mhm stage-stats
+```
+
+4. 先看是否已达到 idle 提交条件
+```bash
+openclaw mhm idle-list --idle-minutes 1 --limit 20
+```
+
+5. 手动提交暂存
 ```bash
 openclaw mhm idle-run --idle-minutes 1 --limit 20
 ```
 
-4. 手动提交测试记录
+6. 手动提交测试记录
 ```bash
 openclaw mhm commit "运维写入测试。" --type decision --session ops-write-verify
 ```
 
-5. 检查是否可读
+7. 检查是否可读
 ```bash
 openclaw mhm list --session ops-write-verify --status all --limit 10
 ```
@@ -180,38 +216,49 @@ openclaw mhm consistency-repair --limit 50 --retry-failed
 
 如果怀疑归档文件缺失、错位、残留：
 
-1. 先看统一归档巡检
+1. 先看“库记录关联归档”是否缺失或越权
+```bash
+openclaw mhm archive-audit --status all --limit 50
+```
+
+2. 再看统一归档巡检
 ```bash
 openclaw mhm archive-report --limit 50 --format markdown
 ```
 
-2. 查看孤儿归档
+3. 需要审计留档时导出快照
+```bash
+openclaw mhm archive-report --limit 200 --format json --output /tmp/mhm-archive-report.json
+openclaw mhm archive-report --limit 200 --format markdown --output /tmp/mhm-archive-report.md
+```
+
+4. 查看孤儿归档
 ```bash
 openclaw mhm archive-orphan-audit --limit 50
 ```
 
-3. 预演隔离
+5. 预演隔离
 ```bash
 openclaw mhm archive-orphan-quarantine --limit 50 --dry-run
 ```
 
-4. 执行隔离
+6. 执行隔离
 ```bash
 openclaw mhm archive-orphan-quarantine --limit 50
 ```
 
-5. 查看隔离区
+7. 查看隔离区
 ```bash
 openclaw mhm archive-quarantine-list --limit 50
 ```
 
-6. 恢复隔离文件
+8. 恢复隔离文件
 ```bash
 openclaw mhm archive-quarantine-restore --limit 50 --dry-run
 openclaw mhm archive-quarantine-restore --limit 50
 ```
 
-7. 彻底清理隔离文件
+9. 彻底清理隔离文件
 ```bash
 openclaw mhm archive-quarantine-purge --limit 50 --dry-run
 openclaw mhm archive-quarantine-purge --limit 50

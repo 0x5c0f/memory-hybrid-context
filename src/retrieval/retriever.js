@@ -9,12 +9,13 @@ class Retriever {
     const limit = Math.max(1, Math.min(20, Math.floor(Number(params.limit) || 5)));
     const query = this.deps.normalizeText(params.query);
     const searchStatus = this.deps.normalizeSearchStatus(params.status) || "active";
+    const agentId = this.deps.resolveAgentId(params.agentId);
     if (!query) {
       return null;
     }
 
-    const filters = [];
-    const values = [];
+    const filters = ["r.agent_id = ?"];
+    const values = [agentId];
     if (Array.isArray(params.scopes) && params.scopes.length > 0) {
       const placeholders = params.scopes.map(() => "?").join(", ");
       filters.push(`r.scope IN (${placeholders})`);
@@ -38,10 +39,11 @@ class Retriever {
 
     const whereClause = filters.length > 0 ? ` AND ${filters.join(" AND ")}` : "";
     const selectColumns =
-      "r.id, r.scope, r.type, r.status, r.title, r.summary, r.l0_text, r.l1_text, r.l2_text, r.content_ref, r.source_path, " +
+      "r.id, r.agent_id, r.scope, r.type, r.status, r.title, r.summary, r.l0_text, r.l1_text, r.l2_text, r.content_ref, r.source_path, " +
       "r.importance, r.confidence, r.updated_at";
     const rowToResult = (row, score) => ({
       id: row.id,
+      agentId: row.agent_id || agentId,
       scope: row.scope,
       type: row.type,
       status: row.status,
@@ -60,6 +62,7 @@ class Retriever {
 
     return {
       limit,
+      agentId,
       query,
       searchStatus,
       values,

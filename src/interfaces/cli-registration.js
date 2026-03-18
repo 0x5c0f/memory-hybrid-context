@@ -15,7 +15,21 @@ function registerMemoryCli({
 }) {
   api.registerCli(
     ({ program }) => {
-      const group = program.command("mhm").description("Memory Hybrid Context commands");
+      const group = program
+        .command("mhm")
+        .description("Memory Hybrid Context commands")
+        .option("--agent-id <id>", "Agent isolation id (default from isolation.defaultAgentId)");
+
+      group.hook("preAction", (_thisCommand, actionCommand) => {
+        const options = actionCommand && typeof actionCommand.optsWithGlobals === "function"
+          ? actionCommand.optsWithGlobals()
+          : actionCommand.opts();
+        const agentId = runtime.resolveAgentId(normalizeText(options && options.agentId));
+        runtime.setActiveAgentContext({
+          agentId,
+          sessionId: normalizeText((options && (options.session || options.sessionId)) || ""),
+        });
+      });
 
       group
         .command("stats")

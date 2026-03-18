@@ -305,6 +305,34 @@ function buildPluginSchemas() {
     properties: {},
   };
 
+  const schemas = [
+    commitParamsSchema,
+    searchParamsSchema,
+    getParamsSchema,
+    listParamsSchema,
+    archiveRepairParamsSchema,
+    archiveOrphanParamsSchema,
+    archiveQuarantineListParamsSchema,
+    archiveQuarantineRestoreParamsSchema,
+    archiveQuarantinePurgeParamsSchema,
+    archiveReportParamsSchema,
+    consistencyReportParamsSchema,
+    consistencyRepairParamsSchema,
+    exportParamsSchema,
+    importParamsSchema,
+    stageListParamsSchema,
+    idleParamsSchema,
+    stageDropParamsSchema,
+    restoreParamsSchema,
+    forgetParamsSchema,
+    emptyParamsSchema,
+  ];
+  for (const schema of schemas) {
+    if (schema && schema.properties && typeof schema.properties === "object" && !schema.properties.agentId) {
+      schema.properties.agentId = { type: "string" };
+    }
+  }
+
   return {
     commitParamsSchema,
     searchParamsSchema,

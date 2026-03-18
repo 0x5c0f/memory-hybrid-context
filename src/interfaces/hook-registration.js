@@ -33,6 +33,26 @@ function registerMemoryHooks({
   shouldAutoRecallPrompt,
   packRecallContext,
 }) {
+  api.on("before_tool_call", async (event, ctx) => {
+    const toolName = normalizeText((event && event.toolName) || "");
+    if (!toolName || !toolName.startsWith("memory_")) {
+      return;
+    }
+    const injectedAgentId = runtime.resolveAgentId((ctx && ctx.agentId) || "");
+    const originalParams = event && event.params && typeof event.params === "object" ? event.params : {};
+    const nextParams = {
+      ...originalParams,
+      agentId: normalizeText(originalParams.agentId) || injectedAgentId,
+    };
+    runtime.setActiveAgentContext({
+      agentId: nextParams.agentId,
+      sessionId: normalizeText((ctx && ctx.sessionId) || originalParams.sessionId),
+    });
+    return {
+      params: nextParams,
+    };
+  });
+
   api.on("agent_end", async (event, ctx) => {
     if (!cfg.capture.autoStage) {
       return;
@@ -49,7 +69,13 @@ function registerMemoryHooks({
       return;
     }
 
+    const agentId = runtime.resolveAgentId((ctx && ctx.agentId) || "");
+    runtime.setActiveAgentContext({
+      agentId,
+      sessionId: normalizeText((ctx && ctx.sessionId) || event.sessionId || event.session_id),
+    });
     const staged = runtime.stageCandidates({
+      agentId,
       sessionId:
         normalizeText((ctx && ctx.sessionId) || event.sessionId || event.session_id) || "unknown",
       items,
@@ -63,7 +89,13 @@ function registerMemoryHooks({
   });
 
   api.on("before_reset", async (event, ctx) => {
+    const agentId = runtime.resolveAgentId((ctx && ctx.agentId) || "");
+    runtime.setActiveAgentContext({
+      agentId,
+      sessionId: normalizeText((ctx && ctx.sessionId) || ""),
+    });
     const result = runtime.handleBeforeReset({
+      agentId,
       reason: normalizeText(event && event.reason),
       sessionFile: normalizeText(event && event.sessionFile),
       messages: Array.isArray(event && event.messages) ? event.messages : [],
@@ -90,6 +122,11 @@ function registerMemoryHooks({
     if (!cfg.recall.auto) {
       return;
     }
+    const agentId = runtime.resolveAgentId((ctx && ctx.agentId) || "");
+    runtime.setActiveAgentContext({
+      agentId,
+      sessionId: normalizeText((ctx && ctx.sessionId) || event?.sessionId || ""),
+    });
     const trigger = normalizeText((ctx && ctx.trigger) || "").toLowerCase();
     if (trigger && trigger !== "user") {
       return;
@@ -105,6 +142,7 @@ function registerMemoryHooks({
 
     const scopes = runtime.resolvePreferredScopes("", "");
     const records = runtime.searchRecords({
+      agentId,
       query: prompt,
       limit: cfg.recall.maxItems,
       scopes,
@@ -124,6 +162,7 @@ function registerMemoryHooks({
     }
 
     runtime.recordRecallEvent({
+      agentId,
       sessionId: normalizeText(event && event.sessionId),
       queryText: prompt,
       queryScope: scopes.join(","),

@@ -137,6 +137,13 @@
     "ttl.purgeAfterDays": {
       "label": "Purge Retention Days",
       "advanced": true
+    },
+    "isolation.mode": {
+      "label": "Isolation Mode"
+    },
+    "isolation.defaultAgentId": {
+      "label": "Default Agent ID",
+      "advanced": true
     }
   },
   "configSchema": {
@@ -445,6 +452,19 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 3650
+          }
+        }
+      },
+      "isolation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["agent", "global"]
+          },
+          "defaultAgentId": {
+            "type": "string"
           }
         }
       }

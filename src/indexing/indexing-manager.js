@@ -4,6 +4,7 @@ class IndexingManager {
   constructor(deps) {
     this.cfg = deps.cfg;
     this.ensureInitialized = deps.ensureInitialized;
+    this.resolveAgentId = deps.resolveAgentId;
     this.normalizeText = deps.normalizeText;
     this.asJson = deps.asJson;
     this.parseJson = deps.parseJson;
@@ -14,15 +15,17 @@ class IndexingManager {
     this.workerActive = false;
   }
 
-  getIndexStats() {
+  getIndexStats(params = {}) {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId(params.agentId);
     const rows = conn
       .prepare(
         `SELECT status, COUNT(*) AS c
            FROM index_jobs
+          WHERE agent_id = ?
           GROUP BY status`,
       )
-      .all();
+      .all(agentId);
     const stats = {
       total: 0,
       pending: 0,
@@ -63,16 +66,18 @@ class IndexingManager {
     const now = Date.now();
     const status = this.normalizeText(params.status).toLowerCase() || "completed";
     const jobId = this.randomUUID();
+    const agentId = this.resolveAgentId(params.agentId);
     conn
       .prepare(
         `INSERT INTO index_jobs (
-           id, record_id, job_type, backend, status, attempts,
+           id, agent_id, record_id, job_type, backend, status, attempts,
            available_at, started_at, completed_at, last_error, payload_json,
            created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         jobId,
+        agentId,
         params.recordId,
         this.normalizeText(params.jobType) || "upsert",
         this.normalizeText(params.backend) || this.vectorBackend.info().backend,
@@ -90,12 +95,13 @@ class IndexingManager {
     if (status === "failed" && params.error) {
       conn
         .prepare(
-          `INSERT INTO index_failures (
-             id, job_id, record_id, backend, error_message, payload_json, failed_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO index_failures (
+             id, agent_id, job_id, record_id, backend, error_message, payload_json, failed_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           this.randomUUID(),
+          agentId,
           jobId,
           params.recordId,
           this.normalizeText(params.backend) || this.vectorBackend.info().backend,
@@ -108,9 +114,10 @@ class IndexingManager {
     return jobId;
   }
 
-  claimIndexJobs(limit) {
+  claimIndexJobs(limit, rawAgentId) {
     const conn = this.ensureInitialized();
     const now = Date.now();
+    const agentId = this.resolveAgentId(rawAgentId);
     const staleThreshold = now - Math.max(30000, this.cfg.indexing.pollMs * 4);
 
     conn
@@ -120,21 +127,23 @@ class IndexingManager {
                 available_at = ?,
                 updated_at = ?
           WHERE status = 'running'
+            AND agent_id = ?
             AND started_at IS NOT NULL
             AND started_at <= ?`,
       )
-      .run(now, now, staleThreshold);
+      .run(now, now, agentId, staleThreshold);
 
     const rows = conn
       .prepare(
         `SELECT id, record_id, job_type, backend, status, attempts, payload_json
            FROM index_jobs
-          WHERE status = 'pending'
+          WHERE agent_id = ?
+            AND status = 'pending'
             AND (available_at IS NULL OR available_at <= ?)
           ORDER BY updated_at ASC
           LIMIT ?`,
       )
-      .all(now, Math.max(1, Math.floor(Number(limit) || 1)));
+      .all(agentId, now, Math.max(1, Math.floor(Number(limit) || 1)));
 
     const claimed = [];
     for (const row of rows) {
@@ -146,9 +155,10 @@ class IndexingManager {
                   started_at = ?,
                   updated_at = ?
             WHERE id = ?
+              AND agent_id = ?
               AND status = 'pending'`,
         )
-        .run(now, now, row.id);
+        .run(now, now, row.id, agentId);
       if (!updated || !updated.changes) {
         continue;
       }
@@ -157,11 +167,12 @@ class IndexingManager {
           `UPDATE memory_records
               SET index_status = 'running',
                   updated_at = updated_at
-            WHERE id = ?`,
-        )
-        .run(row.record_id);
+            WHERE id = ?
+              AND agent_id = ?`,
+        ).run(row.record_id, agentId);
       claimed.push({
         id: row.id,
+        agentId,
         recordId: row.record_id,
         jobType: row.job_type,
         backend: row.backend,
@@ -174,10 +185,11 @@ class IndexingManager {
 
   listIndexJobs(params = {}) {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(100, Math.floor(Number(params.limit) || 20)));
     const status = this.normalizeText(params.status).toLowerCase();
-    const clauses = [];
-    const values = [];
+    const clauses = ["agent_id = ?"];
+    const values = [agentId];
     if (status) {
       clauses.push("status = ?");
       values.push(status);
@@ -186,7 +198,7 @@ class IndexingManager {
     const rows = conn
       .prepare(
         `SELECT id, record_id, job_type, backend, status, attempts,
-                available_at, started_at, completed_at, last_error, updated_at
+                available_at, started_at, completed_at, last_error, updated_at, agent_id
            FROM index_jobs
            ${whereClause}
           ORDER BY updated_at DESC
@@ -195,6 +207,7 @@ class IndexingManager {
       .all(...values, limit);
     return rows.map((row) => ({
       id: row.id,
+      agentId: row.agent_id || agentId,
       recordId: row.record_id,
       jobType: row.job_type,
       backend: row.backend,
@@ -208,9 +221,10 @@ class IndexingManager {
     }));
   }
 
-  completeIndexJob(jobId) {
+  completeIndexJob(jobId, rawAgentId) {
     const conn = this.ensureInitialized();
     const now = Date.now();
+    const agentId = this.resolveAgentId(rawAgentId);
     conn
       .prepare(
         `UPDATE index_jobs
@@ -218,9 +232,10 @@ class IndexingManager {
                 completed_at = ?,
                 last_error = NULL,
                 updated_at = ?
-          WHERE id = ?`,
+          WHERE id = ?
+            AND agent_id = ?`,
       )
-      .run(now, now, jobId);
+      .run(now, now, jobId, agentId);
   }
 
   failIndexJob(job, error) {
@@ -242,28 +257,31 @@ class IndexingManager {
                 completed_at = CASE WHEN ? = 'failed' THEN ? ELSE completed_at END,
                 last_error = ?,
                 updated_at = ?
-          WHERE id = ?`,
+          WHERE id = ?
+            AND agent_id = ?`,
       )
-      .run(nextStatus, nextAvailableAt, nextStatus, now, message, now, job.id);
+      .run(nextStatus, nextAvailableAt, nextStatus, now, message, now, job.id, job.agentId);
 
     conn
       .prepare(
         `UPDATE memory_records
             SET index_status = ?,
                 updated_at = updated_at
-          WHERE id = ?`,
+          WHERE id = ?
+            AND agent_id = ?`,
       )
-      .run(shouldRetry ? "pending" : "failed", job.recordId);
+      .run(shouldRetry ? "pending" : "failed", job.recordId, job.agentId);
 
     if (!shouldRetry) {
       conn
         .prepare(
           `INSERT INTO index_failures (
-             id, job_id, record_id, backend, error_message, payload_json, failed_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             id, agent_id, job_id, record_id, backend, error_message, payload_json, failed_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           this.randomUUID(),
+          job.agentId,
           job.id,
           job.recordId,
           this.normalizeText(job.backend) || this.vectorBackend.info().backend,
@@ -277,6 +295,7 @@ class IndexingManager {
   retryIndexJobs(params = {}) {
     const conn = this.ensureInitialized();
     const now = Date.now();
+    const agentId = this.resolveAgentId(params.agentId);
     const requestedIds = Array.isArray(params.ids)
       ? params.ids.map((value) => this.normalizeText(value)).filter(Boolean)
       : [];
@@ -289,19 +308,21 @@ class IndexingManager {
         .prepare(
           `SELECT id, record_id
              FROM index_jobs
-            WHERE id IN (${placeholders})`,
+            WHERE agent_id = ?
+              AND id IN (${placeholders})`,
         )
-        .all(...requestedIds);
+        .all(agentId, ...requestedIds);
     } else {
       rows = conn
         .prepare(
           `SELECT id, record_id
              FROM index_jobs
-            WHERE status = 'failed'
+            WHERE agent_id = ?
+              AND status = 'failed'
             ORDER BY updated_at DESC
             LIMIT ?`,
         )
-        .all(limit);
+        .all(agentId, limit);
     }
 
     let retried = 0;
@@ -315,9 +336,10 @@ class IndexingManager {
                   completed_at = NULL,
                   last_error = NULL,
                   updated_at = ?
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(now, now, row.id);
+        .run(now, now, row.id, agentId);
       if (!updated || !updated.changes) {
         continue;
       }
@@ -326,24 +348,27 @@ class IndexingManager {
           `UPDATE memory_records
               SET index_status = 'pending',
                   updated_at = updated_at
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(row.record_id);
+        .run(row.record_id, agentId);
       retried += 1;
     }
 
     return {
+      agentId,
       retried,
     };
   }
 
   enqueueReindexJobs(params = {}) {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(500, Math.floor(Number(params.limit) || 100)));
     const onlyMissingNative = params.onlyMissingNative === true;
     const vectorInfo = this.vectorBackend.info();
 
-    const clauses = ["r.status IN ('active', 'superseded')"];
+    const clauses = ["r.agent_id = ?", "r.status IN ('active', 'superseded')"];
     if (params.scope) {
       clauses.push("r.scope = ?");
     }
@@ -354,7 +379,7 @@ class IndexingManager {
       clauses.push("vb.record_id IS NULL");
     }
 
-    const values = [];
+    const values = [agentId];
     if (params.scope) {
       values.push(this.normalizeText(params.scope));
     }
@@ -380,11 +405,12 @@ class IndexingManager {
           .prepare(
             `SELECT 1
                FROM index_jobs
-              WHERE record_id = ?
+              WHERE agent_id = ?
+                AND record_id = ?
                 AND status IN ('pending', 'running')
               LIMIT 1`,
           )
-          .get(row.id) || null;
+          .get(agentId, row.id) || null;
       if (pending) {
         continue;
       }
@@ -395,11 +421,13 @@ class IndexingManager {
               SET index_status = 'pending',
                   indexed_at = NULL,
                   updated_at = updated_at
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(row.id);
+        .run(row.id, agentId);
 
       this.recordIndexJob({
+        agentId,
         recordId: row.id,
         jobType: "reindex",
         backend: vectorInfo.backend,
@@ -415,6 +443,7 @@ class IndexingManager {
     }
 
     return {
+      agentId,
       queued,
       scanned: rows.length,
       onlyMissingNative,
@@ -423,8 +452,10 @@ class IndexingManager {
 
   processIndexJobs(params = {}) {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId(params.agentId);
     if (this.workerActive) {
       return {
+        agentId,
         claimed: 0,
         completed: 0,
         failed: 0,
@@ -436,6 +467,7 @@ class IndexingManager {
     const batchSize = Math.max(1, Math.min(this.cfg.indexing.batchSize, limit));
     const drain = params.drain === true;
     const stats = {
+      agentId,
       claimed: 0,
       completed: 0,
       failed: 0,
@@ -446,7 +478,7 @@ class IndexingManager {
     try {
       while (stats.claimed < limit) {
         const remaining = limit - stats.claimed;
-        const claimedJobs = this.claimIndexJobs(Math.min(batchSize, remaining));
+        const claimedJobs = this.claimIndexJobs(Math.min(batchSize, remaining), agentId);
         if (claimedJobs.length === 0) {
           break;
         }
@@ -459,13 +491,14 @@ class IndexingManager {
                 `SELECT id, status, expires_at, l0_text, l1_text, l2_text, summary, raw_text, keywords_json
                    FROM memory_records
                   WHERE id = ?
+                    AND agent_id = ?
                   LIMIT 1`,
               )
-              .get(job.recordId) || null;
+              .get(job.recordId, agentId) || null;
 
           if (!row) {
             this.vectorBackend.deleteNativeEmbedding(conn, job.recordId);
-            this.completeIndexJob(job.id);
+            this.completeIndexJob(job.id, agentId);
             stats.skipped += 1;
             continue;
           }
@@ -485,10 +518,11 @@ class IndexingManager {
                     SET status = CASE WHEN ? THEN 'expired' ELSE status END,
                         index_status = ?,
                         updated_at = updated_at
-                  WHERE id = ?`,
+                  WHERE id = ?
+                    AND agent_id = ?`,
               )
-              .run(rowExpired ? 1 : 0, rowExpired ? "expired" : "skipped", job.recordId);
-            this.completeIndexJob(job.id);
+              .run(rowExpired ? 1 : 0, rowExpired ? "expired" : "skipped", job.recordId, agentId);
+            this.completeIndexJob(job.id, agentId);
             stats.skipped += 1;
             continue;
           }
@@ -534,7 +568,8 @@ class IndexingManager {
                         index_status = ?,
                         indexed_at = ?,
                         updated_at = updated_at
-                  WHERE id = ?`,
+                  WHERE id = ?
+                    AND agent_id = ?`,
               )
               .run(
                 this.asJson(embeddingVector, []),
@@ -544,11 +579,12 @@ class IndexingManager {
                 "indexed",
                 now,
                 job.recordId,
+                agentId,
               );
 
             this.vectorBackend.upsertNativeEmbedding(conn, job.recordId, embeddingVector, now);
 
-            this.completeIndexJob(job.id);
+            this.completeIndexJob(job.id, agentId);
             stats.completed += 1;
           } catch (err) {
             this.failIndexJob(job, err);

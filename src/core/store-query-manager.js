@@ -3,42 +3,48 @@
 class StoreQueryManager {
   constructor(deps) {
     this.ensureInitialized = deps.ensureInitialized;
+    this.resolveAgentId = deps.resolveAgentId;
     this.normalizeText = deps.normalizeText;
     this.normalizeSearchStatus = deps.normalizeSearchStatus;
     this.asJson = deps.asJson;
     this.randomUUID = deps.randomUUID;
   }
 
-  countRecords() {
+  countRecords(params = {}) {
     const conn = this.ensureInitialized();
-    return conn.prepare("SELECT COUNT(*) AS c FROM memory_records").get().c || 0;
+    const agentId = this.resolveAgentId(params.agentId);
+    return conn.prepare("SELECT COUNT(*) AS c FROM memory_records WHERE agent_id = ?").get(agentId).c || 0;
   }
 
-  countCommits() {
+  countCommits(params = {}) {
     const conn = this.ensureInitialized();
-    return conn.prepare("SELECT COUNT(*) AS c FROM commit_log").get().c || 0;
+    const agentId = this.resolveAgentId(params.agentId);
+    return conn.prepare("SELECT COUNT(*) AS c FROM commit_log WHERE agent_id = ?").get(agentId).c || 0;
   }
 
-  countRecallEvents() {
+  countRecallEvents(params = {}) {
     const conn = this.ensureInitialized();
-    return conn.prepare("SELECT COUNT(*) AS c FROM recall_events").get().c || 0;
+    const agentId = this.resolveAgentId(params.agentId);
+    return conn.prepare("SELECT COUNT(*) AS c FROM recall_events WHERE agent_id = ?").get(agentId).c || 0;
   }
 
-  countStaging() {
+  countStaging(params = {}) {
     const conn = this.ensureInitialized();
-    return conn.prepare("SELECT COUNT(*) AS c FROM staging_candidates").get().c || 0;
+    const agentId = this.resolveAgentId(params.agentId);
+    return conn.prepare("SELECT COUNT(*) AS c FROM staging_candidates WHERE agent_id = ?").get(agentId).c || 0;
   }
 
   listRecords(params = {}) {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(200, Math.floor(Number(params.limit) || 20)));
     const searchStatus = this.normalizeSearchStatus(params.status) || "active";
     const scope = this.normalizeText(params.scope);
     const sessionId = this.normalizeText(params.sessionId);
     const memoryType = this.normalizeText(params.type).toLowerCase();
 
-    const clauses = [];
-    const values = [];
+    const clauses = ["agent_id = ?"];
+    const values = [agentId];
     if (scope) {
       clauses.push("scope = ?");
       values.push(scope);
@@ -64,7 +70,7 @@ class StoreQueryManager {
     const rows = conn
       .prepare(
         `SELECT id, scope, type, status, title, summary, session_id, source_path,
-                index_status, created_at, updated_at, last_used_at, expires_at, expired_at
+                index_status, created_at, updated_at, last_used_at, expires_at, expired_at, agent_id
            FROM memory_records
            ${whereClause}
           ORDER BY updated_at DESC
@@ -74,6 +80,7 @@ class StoreQueryManager {
 
     return rows.map((row) => ({
       id: row.id,
+      agentId: row.agent_id || agentId,
       scope: row.scope,
       type: row.type,
       status: row.status,
@@ -92,17 +99,19 @@ class StoreQueryManager {
 
   recordRecallEvent(params) {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId(params.agentId);
     const ids = Array.isArray(params.selectedIds)
       ? params.selectedIds.map((value) => this.normalizeText(value)).filter(Boolean)
       : [];
     conn
       .prepare(
         `INSERT INTO recall_events (
-           id, session_id, query_text, query_scope, injected_level, injected_chars, selected_ids_json, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           id, agent_id, session_id, query_text, query_scope, injected_level, injected_chars, selected_ids_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         this.randomUUID(),
+        agentId,
         this.normalizeText(params.sessionId) || null,
         this.normalizeText(params.queryText),
         this.normalizeText(params.queryScope) || null,

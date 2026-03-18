@@ -50,7 +50,7 @@ const DEFAULT_CONFIG = {
   },
   archive: {
     enabled: true,
-    dir: "~/.openclaw/workspace/.memory-hybrid",
+    dir: "~/.openclaw/memory-hybrid/archive",
     writeMarkdown: true,
   },
   capture: {
@@ -108,6 +108,10 @@ const DEFAULT_CONFIG = {
     autoCleanup: true,
     cleanupPollMs: 60000,
     purgeAfterDays: 30,
+  },
+  isolation: {
+    mode: "agent",
+    defaultAgentId: "main",
   },
 };
 
@@ -228,6 +232,11 @@ function mergeConfig(raw) {
   cfg.ttl.autoCleanup = cfg.ttl.autoCleanup !== false;
   cfg.ttl.cleanupPollMs = Math.max(5000, Math.min(24 * 60 * 60 * 1000, Math.floor(Number(cfg.ttl.cleanupPollMs) || 60000)));
   cfg.ttl.purgeAfterDays = Math.max(0, Math.min(3650, Math.floor(Number(cfg.ttl.purgeAfterDays) || 0)));
+  if (!cfg.isolation || typeof cfg.isolation !== "object") {
+    cfg.isolation = mergeObject(DEFAULT_CONFIG.isolation, {});
+  }
+  cfg.isolation.mode = normalizeIsolationMode(cfg.isolation.mode);
+  cfg.isolation.defaultAgentId = normalizeAgentId(cfg.isolation.defaultAgentId) || DEFAULT_CONFIG.isolation.defaultAgentId;
   const weights = [Number(cfg.query.ftsWeight), Number(cfg.query.vectorWeight)];
   const sum = weights.filter((value) => Number.isFinite(value) && value >= 0).reduce((a, b) => a + b, 0);
   if (sum > 0) {
@@ -278,6 +287,26 @@ function normalizeText(text) {
   return String(text || "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeIsolationMode(value) {
+  const mode = normalizeText(value).toLowerCase();
+  if (mode === "global") {
+    return "global";
+  }
+  return "agent";
+}
+
+function normalizeAgentId(value) {
+  const raw = normalizeText(value).toLowerCase();
+  if (!raw) {
+    return "";
+  }
+  const sanitized = raw
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return sanitized || "";
 }
 
 function normalizeSearchStatus(value) {
@@ -1243,17 +1272,27 @@ function createVectorBackend(api, cfg) {
       });
       return rows.slice(0, params.limit);
     },
-    getStats(conn) {
+    getStats(conn, params = {}) {
       if (!isEnabled) {
         return {
           backend: requestedBackend,
           mode: "disabled",
         };
       }
+      const agentId = normalizeAgentId(params.agentId);
       let nativeRows = 0;
       if (nativeState.ready) {
         try {
-          const row = conn.prepare("SELECT COUNT(*) AS total FROM memory_vector_blobs").get();
+          const row = agentId
+            ? conn
+                .prepare(
+                  `SELECT COUNT(*) AS total
+                     FROM memory_vector_blobs vb
+                     JOIN memory_records r ON r.id = vb.record_id
+                    WHERE r.agent_id = ?`,
+                )
+                .get(agentId)
+            : conn.prepare("SELECT COUNT(*) AS total FROM memory_vector_blobs").get();
           nativeRows = Number(row && row.total) || 0;
         } catch (_err) {
           nativeRows = 0;
@@ -1482,35 +1521,59 @@ function createVectorBackend(api, cfg) {
       });
       return rows.slice(0, params.limit);
     },
-    getStats(conn) {
+    getStats(conn, params = {}) {
       if (!isEnabled) {
         return {
           backend: requestedBackend,
           mode: "disabled",
         };
       }
-      const summaryRow = conn
-        .prepare(
-          `SELECT COUNT(*) AS bucket_rows,
-                  COUNT(DISTINCT bucket_key) AS unique_buckets,
-                  COUNT(DISTINCT record_id) AS indexed_records
-             FROM memory_ann_buckets`,
-        )
-        .get();
+      const agentId = normalizeAgentId(params.agentId);
+      const summaryRow = agentId
+        ? conn
+            .prepare(
+              `SELECT COUNT(*) AS bucket_rows,
+                      COUNT(DISTINCT ab.bucket_key) AS unique_buckets,
+                      COUNT(DISTINCT ab.record_id) AS indexed_records
+                 FROM memory_ann_buckets ab
+                 JOIN memory_records r ON r.id = ab.record_id
+                WHERE r.agent_id = ?`,
+            )
+            .get(agentId)
+        : conn
+            .prepare(
+              `SELECT COUNT(*) AS bucket_rows,
+                      COUNT(DISTINCT bucket_key) AS unique_buckets,
+                      COUNT(DISTINCT record_id) AS indexed_records
+                 FROM memory_ann_buckets`,
+            )
+            .get();
       const bucketRows = Number(summaryRow && summaryRow.bucket_rows) || 0;
       const uniqueBuckets = Number(summaryRow && summaryRow.unique_buckets) || 0;
       const indexedRecords = Number(summaryRow && summaryRow.indexed_records) || 0;
       const avgBucketsPerRecord =
         indexedRecords > 0 ? Number((bucketRows / indexedRecords).toFixed(2)) : 0;
-      const hottestBuckets = conn
-        .prepare(
-          `SELECT bucket_key AS bucketKey, COUNT(*) AS recordCount
-             FROM memory_ann_buckets
-            GROUP BY bucket_key
-            ORDER BY recordCount DESC, bucketKey ASC
-            LIMIT 8`,
-        )
-        .all();
+      const hottestBuckets = agentId
+        ? conn
+            .prepare(
+              `SELECT ab.bucket_key AS bucketKey, COUNT(*) AS recordCount
+                 FROM memory_ann_buckets ab
+                 JOIN memory_records r ON r.id = ab.record_id
+                WHERE r.agent_id = ?
+                GROUP BY ab.bucket_key
+                ORDER BY recordCount DESC, bucketKey ASC
+                LIMIT 8`,
+            )
+            .all(agentId)
+        : conn
+            .prepare(
+              `SELECT bucket_key AS bucketKey, COUNT(*) AS recordCount
+                 FROM memory_ann_buckets
+                GROUP BY bucket_key
+                ORDER BY recordCount DESC, bucketKey ASC
+                LIMIT 8`,
+            )
+            .all();
       return {
         backend: requestedBackend,
         mode: this.info().mode,
@@ -2090,6 +2153,8 @@ function summarizeConfig(cfg) {
     recallLevel: cfg.recall.defaultLevel,
     recallMaxItems: cfg.recall.maxItems,
     captureMaxCandidates: cfg.capture.maxCandidatesPerTurn,
+    isolationMode: cfg.isolation?.mode || "agent",
+    isolationDefaultAgentId: cfg.isolation?.defaultAgentId || "main",
   };
 }
 
@@ -2097,8 +2162,53 @@ function createRuntime(api, cfg) {
   let db = null;
   let initialized = false;
   let storePath = "";
-  let archiveDir = "";
+  let archiveRootDir = "";
   const vectorBackend = createVectorBackend(api, cfg);
+  const activeContext = {
+    agentId: normalizeAgentId(cfg.isolation?.defaultAgentId) || "main",
+    sessionId: "",
+  };
+
+  function resolveAgentId(rawAgentId) {
+    const mode = normalizeIsolationMode(cfg?.isolation?.mode);
+    if (mode === "global") {
+      return "global";
+    }
+    const current = normalizeAgentId(rawAgentId);
+    if (current) {
+      return current;
+    }
+    const active = normalizeAgentId(activeContext.agentId);
+    if (active) {
+      return active;
+    }
+    const fallback = normalizeAgentId(cfg?.isolation?.defaultAgentId);
+    return fallback || "main";
+  }
+
+  function setActiveAgentContext(context = {}) {
+    if (context && Object.prototype.hasOwnProperty.call(context, "agentId")) {
+      activeContext.agentId = resolveAgentId(context.agentId);
+    }
+    if (context && Object.prototype.hasOwnProperty.call(context, "sessionId")) {
+      activeContext.sessionId = normalizeText(context.sessionId);
+    }
+  }
+
+  function getActiveAgentId() {
+    return resolveAgentId(activeContext.agentId);
+  }
+
+  function getArchiveDir(rawAgentId) {
+    const root = archiveRootDir;
+    if (!root) {
+      return "";
+    }
+    if (normalizeIsolationMode(cfg?.isolation?.mode) !== "agent") {
+      return root;
+    }
+    return path.join(root, resolveAgentId(rawAgentId));
+  }
 
   function logDebug(message, meta) {
     if (!cfg.debug) {
@@ -2115,6 +2225,7 @@ function createRuntime(api, cfg) {
     cfg,
     vectorBackend,
     logDebug,
+    resolveAgentId,
     normalizeText,
     normalizeSearchStatus,
     buildFtsQuery,
@@ -2127,10 +2238,11 @@ function createRuntime(api, cfg) {
     }
 
     storePath = resolveConfiguredPath(api, cfg.store.path);
-    archiveDir = resolveConfiguredPath(api, cfg.archive.dir);
+    archiveRootDir = resolveConfiguredPath(api, cfg.archive.dir);
     ensureDir(path.dirname(storePath));
     if (cfg.archive.enabled && cfg.archive.writeMarkdown) {
-      ensureDir(archiveDir);
+      ensureDir(archiveRootDir);
+      ensureDir(getArchiveDir(getActiveAgentId()));
     }
 
     db = new DatabaseSync(storePath, {
@@ -2144,33 +2256,54 @@ function createRuntime(api, cfg) {
 
     logDebug("memory-hybrid-context: sqlite initialized", {
       storePath,
-      archiveDir,
+      archiveRootDir,
+      activeArchiveDir: getArchiveDir(getActiveAgentId()),
     });
 
     return db;
   }
 
   function ensureSchemaMigrations(conn) {
-    const columns = conn.prepare("PRAGMA table_info(memory_records)").all();
-    const known = new Set(columns.map((row) => String(row.name || "")));
     const vectorInfo = vectorBackend.info();
-    const addColumnIfMissing = (name, sqlType) => {
-      if (known.has(name)) {
+    const getKnownColumns = (tableName) =>
+      new Set(
+        conn
+          .prepare(`PRAGMA table_info(${tableName})`)
+          .all()
+          .map((row) => String(row.name || "")),
+      );
+
+    const addColumnIfMissing = (tableName, knownColumns, name, sqlType) => {
+      if (knownColumns.has(name)) {
         return;
       }
-      conn.exec(`ALTER TABLE memory_records ADD COLUMN ${name} ${sqlType}`);
-      known.add(name);
+      conn.exec(`ALTER TABLE ${tableName} ADD COLUMN ${name} ${sqlType}`);
+      knownColumns.add(name);
     };
 
-    addColumnIfMissing("l0_text", "TEXT");
-    addColumnIfMissing("l1_text", "TEXT");
-    addColumnIfMissing("l2_text", "TEXT");
-    addColumnIfMissing("content_hash", "TEXT");
-    addColumnIfMissing("embedding_version", "TEXT");
-    addColumnIfMissing("vector_backend", "TEXT");
-    addColumnIfMissing("index_status", "TEXT");
-    addColumnIfMissing("indexed_at", "INTEGER");
-    addColumnIfMissing("expired_at", "INTEGER");
+    const memoryColumns = getKnownColumns("memory_records");
+    addColumnIfMissing("memory_records", memoryColumns, "agent_id", "TEXT NOT NULL DEFAULT 'global'");
+    addColumnIfMissing("memory_records", memoryColumns, "l0_text", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "l1_text", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "l2_text", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "content_hash", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "embedding_version", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "vector_backend", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "index_status", "TEXT");
+    addColumnIfMissing("memory_records", memoryColumns, "indexed_at", "INTEGER");
+    addColumnIfMissing("memory_records", memoryColumns, "expired_at", "INTEGER");
+
+    const agentScopedTables = [
+      "staging_candidates",
+      "commit_log",
+      "index_jobs",
+      "index_failures",
+      "recall_events",
+    ];
+    for (const tableName of agentScopedTables) {
+      const knownColumns = getKnownColumns(tableName);
+      addColumnIfMissing(tableName, knownColumns, "agent_id", "TEXT NOT NULL DEFAULT 'global'");
+    }
 
     conn.exec(
       `UPDATE memory_records
@@ -2220,9 +2353,40 @@ function createRuntime(api, cfg) {
         vectorInfo.enabled ? 1 : 0,
       );
 
+    conn.exec(
+      `UPDATE memory_records
+          SET agent_id = COALESCE(NULLIF(TRIM(agent_id), ''), 'global')`,
+    );
+    conn.exec(
+      `UPDATE staging_candidates
+          SET agent_id = COALESCE(NULLIF(TRIM(agent_id), ''), 'global')`,
+    );
+    conn.exec(
+      `UPDATE commit_log
+          SET agent_id = COALESCE(NULLIF(TRIM(agent_id), ''), 'global')`,
+    );
+    conn.exec(
+      `UPDATE index_jobs
+          SET agent_id = COALESCE(NULLIF(TRIM(agent_id), ''), 'global')`,
+    );
+    conn.exec(
+      `UPDATE index_failures
+          SET agent_id = COALESCE(NULLIF(TRIM(agent_id), ''), 'global')`,
+    );
+    conn.exec(
+      `UPDATE recall_events
+          SET agent_id = COALESCE(NULLIF(TRIM(agent_id), ''), 'global')`,
+    );
+
     conn.exec("CREATE INDEX IF NOT EXISTS idx_memory_index_status ON memory_records(index_status)");
     conn.exec("CREATE INDEX IF NOT EXISTS idx_memory_vector_backend ON memory_records(vector_backend)");
     conn.exec("CREATE INDEX IF NOT EXISTS idx_memory_indexed_at ON memory_records(indexed_at DESC)");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_memory_agent_updated_at ON memory_records(agent_id, updated_at DESC)");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_memory_agent_scope_type_status ON memory_records(agent_id, scope, type, status)");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_staging_agent_session_created_at ON staging_candidates(agent_id, session_id, created_at DESC)");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_index_jobs_agent_status ON index_jobs(agent_id, status, updated_at DESC)");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_index_failures_agent_failed_at ON index_failures(agent_id, failed_at DESC)");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_recall_events_agent_created_at ON recall_events(agent_id, created_at DESC)");
   }
 
   const projectManager = new ProjectManager({
@@ -2231,7 +2395,8 @@ function createRuntime(api, cfg) {
     normalizeText,
     stablePathKey,
     resolveConfiguredWorkspace: (explicit) => resolveConfiguredPath(api, explicit),
-    getArchiveDir: () => archiveDir,
+    getArchiveDir,
+    resolveAgentId,
     randomUUID,
     findGitRoot,
     readGitRemote,
@@ -2241,8 +2406,11 @@ function createRuntime(api, cfg) {
   });
 
   function resolveRuntimeScopes(rawScope, memoryType) {
+    const projectBinding = projectManager.getCurrentProject(false, {
+      agentId: getActiveAgentId(),
+    });
     return resolvePreferredScopes(cfg, rawScope, memoryType, {
-      projectBinding: projectManager.getCurrentProject(),
+      projectBinding,
     });
   }
 
@@ -2262,6 +2430,7 @@ function createRuntime(api, cfg) {
   const indexingManager = new IndexingManager({
     cfg,
     ensureInitialized,
+    resolveAgentId,
     normalizeText,
     asJson,
     parseJson,
@@ -2282,7 +2451,8 @@ function createRuntime(api, cfg) {
 
     const ts = Date.now();
     const parts = isoDateParts(ts);
-    const sessionsDir = path.join(archiveDir, "sessions");
+    const resolvedAgentId = resolveAgentId(params.agentId);
+    const sessionsDir = path.join(getArchiveDir(resolvedAgentId), "sessions");
     ensureDir(sessionsDir);
 
     const reason = normalizeText(params.reason) || "reset";
@@ -2292,6 +2462,7 @@ function createRuntime(api, cfg) {
     const lines = [
       `# Session Archive: ${parts.date} ${parts.time} UTC`,
       "",
+      `- **Agent ID**: ${resolvedAgentId}`,
       `- **Reason**: ${reason}`,
       `- **Session ID**: ${normalizeText(params.sessionId) || "unknown"}`,
     ];
@@ -2322,6 +2493,7 @@ function createRuntime(api, cfg) {
   const recordManager = new RecordManager({
     cfg,
     ensureInitialized,
+    resolveAgentId,
     normalizeText,
     parseJson,
     asJson,
@@ -2335,7 +2507,7 @@ function createRuntime(api, cfg) {
     vectorBackend,
     computeContentHash,
     recordIndexJob: indexingManager.recordIndexJob.bind(indexingManager),
-    getArchiveDir: () => archiveDir,
+    getArchiveDir,
     isoDateParts,
     slugify,
     clipText,
@@ -2345,6 +2517,7 @@ function createRuntime(api, cfg) {
 
   const storeQueryManager = new StoreQueryManager({
     ensureInitialized,
+    resolveAgentId,
     normalizeText,
     normalizeSearchStatus,
     asJson,
@@ -2353,19 +2526,33 @@ function createRuntime(api, cfg) {
 
   function searchRecords(params) {
     const conn = ensureInitialized();
-    return retriever.search(conn, params);
+    const safeParams = params && typeof params === "object" ? params : {};
+    return retriever.search(conn, {
+      ...safeParams,
+      agentId: resolveAgentId(safeParams.agentId),
+    });
+  }
+
+  function getVectorStatsByAgent(agentId) {
+    return vectorBackend.getStats(ensureInitialized(), {
+      agentId: resolveAgentId(agentId),
+    });
+  }
+
+  function getVectorHealthByAgent(agentId) {
+    return evaluateVectorHealth({
+      vectorInfo: {
+        ...vectorBackend.info(),
+      },
+      vectorStats: getVectorStatsByAgent(agentId),
+    });
   }
 
   const archiveGovernance = new ArchiveGovernanceManager({
-    getArchiveDir: () => archiveDir,
+    getArchiveDir,
+    resolveAgentId,
     ensureInitialized,
-    getVectorHealth: () =>
-      evaluateVectorHealth({
-        vectorInfo: {
-          ...vectorBackend.info(),
-        },
-        vectorStats: vectorBackend.getStats(ensureInitialized()),
-      }),
+    getVectorHealth: getVectorHealthByAgent,
     listRecords: storeQueryManager.listRecords.bind(storeQueryManager),
     readRecordById: recordManager.readRecordById.bind(recordManager),
     normalizeText,
@@ -2380,6 +2567,7 @@ function createRuntime(api, cfg) {
 
   const consistencyManager = new ConsistencyManager({
     ensureInitialized,
+    resolveAgentId,
     normalizeText,
     normalizeSearchStatus,
     formatTimestamp,
@@ -2388,17 +2576,12 @@ function createRuntime(api, cfg) {
     getVectorInfo: () => ({
       ...vectorBackend.info(),
     }),
-    getVectorHealth: () =>
-      evaluateVectorHealth({
-        vectorInfo: {
-          ...vectorBackend.info(),
-        },
-        vectorStats: vectorBackend.getStats(ensureInitialized()),
-      }),
+    getVectorHealth: getVectorHealthByAgent,
     getArchiveAuditReport: archiveGovernance.getArchiveAuditReport.bind(archiveGovernance),
   });
 
   const importExportManager = new ImportExportManager({
+    resolveAgentId,
     normalizeText,
     normalizeSearchStatus,
     formatTimestamp,
@@ -2415,13 +2598,18 @@ function createRuntime(api, cfg) {
     resolveMergePlan: recordManager.resolveMergePlan.bind(recordManager),
   });
 
-  function getRecordById(id) {
-    return recordManager.readRecordById(id, { touchLastUsed: true, includeArchive: true });
+  function getRecordById(id, options = {}) {
+    return recordManager.readRecordById(id, {
+      touchLastUsed: true,
+      includeArchive: true,
+      agentId: options.agentId,
+    });
   }
 
   const lifecycleManager = new LifecycleManager({
     cfg,
-    getArchiveDir: () => archiveDir,
+    resolveAgentId,
+    getArchiveDir,
     ensureInitialized,
     normalizeText,
     stablePathKey,
@@ -2433,6 +2621,7 @@ function createRuntime(api, cfg) {
   const statsPolicyManager = new StatsPolicyManager({
     cfg,
     ensureInitialized,
+    resolveAgentId,
     normalizeText,
     computeAutoExpiryForType,
     resolveRoutedScopeByType,
@@ -2442,6 +2631,7 @@ function createRuntime(api, cfg) {
   const stagingManager = new StagingManager({
     cfg,
     ensureInitialized,
+    resolveAgentId,
     normalizeText,
     sanitizeIncomingMemoryText,
     shouldStageText,
@@ -2460,17 +2650,49 @@ function createRuntime(api, cfg) {
     ...vectorBackend.info(),
   });
 
-  const getVectorStats = () => vectorBackend.getStats(ensureInitialized());
+  const getVectorStats = (params = {}) =>
+    getVectorStatsByAgent(params && typeof params === "object" ? params.agentId : undefined);
 
-  const getVectorHealth = () =>
-    evaluateVectorHealth({
-      vectorInfo: getVectorInfo(),
-      vectorStats: getVectorStats(),
-    });
+  const getVectorHealth = (params = {}) =>
+    getVectorHealthByAgent(params && typeof params === "object" ? params.agentId : undefined);
+
+  function listKnownAgentIds() {
+    const conn = ensureInitialized();
+    const ids = new Set();
+    const tables = [
+      "memory_records",
+      "staging_candidates",
+      "commit_log",
+      "index_jobs",
+      "index_failures",
+      "recall_events",
+    ];
+    for (const tableName of tables) {
+      const rows = conn
+        .prepare(
+          `SELECT DISTINCT agent_id
+             FROM ${tableName}
+            WHERE agent_id IS NOT NULL
+              AND TRIM(agent_id) <> ''`,
+        )
+        .all();
+      for (const row of rows) {
+        ids.add(resolveAgentId(row.agent_id));
+      }
+    }
+    if (ids.size === 0) {
+      ids.add(getActiveAgentId());
+    }
+    return Array.from(ids);
+  }
 
   return {
     ensureInitialized,
     close,
+    resolveAgentId,
+    setActiveAgentContext,
+    getActiveAgentId,
+    listKnownAgentIds,
     countRecords: storeQueryManager.countRecords.bind(storeQueryManager),
     countCommits: storeQueryManager.countCommits.bind(storeQueryManager),
     countRecallEvents: storeQueryManager.countRecallEvents.bind(storeQueryManager),
@@ -2527,7 +2749,8 @@ function createRuntime(api, cfg) {
     getProjectOverride: projectManager.getProjectOverride.bind(projectManager),
     resolvePreferredScopes: resolveRuntimeScopes,
     getStorePath: () => storePath,
-    getArchiveDir: () => archiveDir,
+    getArchiveDir,
+    getArchiveRootDir: () => archiveRootDir,
     getVectorInfo,
     getVectorStats,
     getVectorHealth,
@@ -2561,7 +2784,7 @@ Planned implementation stages:
 const plugin = {
   id: "memory-hybrid-context",
   name: "Memory Hybrid Context",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Layered dual-track memory plugin.",
   kind: "memory",
   register(api) {
@@ -2579,6 +2802,8 @@ const plugin = {
       archiveQuarantineRestoreParamsSchema,
       archiveQuarantinePurgeParamsSchema,
       archiveReportParamsSchema,
+      consistencyReportParamsSchema,
+      consistencyRepairParamsSchema,
       exportParamsSchema,
       importParamsSchema,
       stageListParamsSchema,
@@ -2589,19 +2814,27 @@ const plugin = {
       emptyParamsSchema,
     } = buildPluginSchemas();
 
-    const runCommit = async (params) => {
-      const summaryText = normalizeText(params.summary);
-      const commitSource = normalizeText(params.source) || (summaryText ? "inline" : "staging");
-      const resolvedType = normalizeText(params.type) || "other";
-      const scopeUris = runtime.resolvePreferredScopes(params.scope, resolvedType);
+    const runCommit = async (params = {}) => {
+      const safeParams = params && typeof params === "object" ? params : {};
+      const resolvedAgentId = runtime.resolveAgentId(safeParams.agentId);
+      const resolvedSessionId = normalizeText(safeParams.sessionId);
+      runtime.setActiveAgentContext({
+        agentId: resolvedAgentId,
+        sessionId: resolvedSessionId,
+      });
+      const summaryText = normalizeText(safeParams.summary);
+      const commitSource = normalizeText(safeParams.source) || (summaryText ? "inline" : "staging");
+      const resolvedType = normalizeText(safeParams.type) || "other";
+      const scopeUris = runtime.resolvePreferredScopes(safeParams.scope, resolvedType);
 
       if ((commitSource === "staging" || commitSource === "both") && !summaryText) {
         const staged = runtime.commitStagedCandidates({
-          sessionId: normalizeText(params.sessionId),
-          scopes: params.scope ? [normalizeText(params.scope)] : [],
-          policy: normalizeText(params.policy) || "conservative",
-          archive: params.archive !== false,
-          limit: params.limit,
+          agentId: resolvedAgentId,
+          sessionId: resolvedSessionId,
+          scopes: safeParams.scope ? [normalizeText(safeParams.scope)] : [],
+          policy: normalizeText(safeParams.policy) || "conservative",
+          archive: safeParams.archive !== false,
+          limit: safeParams.limit,
         });
         const message =
           staged.action === "empty"
@@ -2621,38 +2854,40 @@ const plugin = {
       }
 
       const record = runtime.insertRecord({
-        title: makeTitle(summaryText, params.title),
+        agentId: resolvedAgentId,
+        title: makeTitle(summaryText, safeParams.title),
         summary: clipText(summaryText, 500),
-        details: normalizeText(params.details),
-        l0Text: params.l0Text,
-        l1Text: params.l1Text,
-        l2Text: params.l2Text,
+        details: normalizeText(safeParams.details),
+        l0Text: safeParams.l0Text,
+        l1Text: safeParams.l1Text,
+        l2Text: safeParams.l2Text,
         type: resolvedType,
-        scope: scopeUris[0] || makeScope(cfg, params.scope),
+        scope: scopeUris[0] || makeScope(cfg, safeParams.scope),
         scopes: cfg.scopes.autoMirror
           ? scopeUris
-          : [scopeUris[0] || makeScope(cfg, params.scope)],
-        sessionId: normalizeText(params.sessionId),
+          : [scopeUris[0] || makeScope(cfg, safeParams.scope)],
+        sessionId: resolvedSessionId,
         importance:
-          typeof params.importance === "number" && Number.isFinite(params.importance)
-            ? Math.max(0, Math.min(1, params.importance))
+          typeof safeParams.importance === "number" && Number.isFinite(safeParams.importance)
+            ? Math.max(0, Math.min(1, safeParams.importance))
             : 0.7,
         confidence:
-          typeof params.confidence === "number" && Number.isFinite(params.confidence)
-            ? Math.max(0, Math.min(1, params.confidence))
+          typeof safeParams.confidence === "number" && Number.isFinite(safeParams.confidence)
+            ? Math.max(0, Math.min(1, safeParams.confidence))
             : 0.8,
-        keywords: normalizeKeywords(params.keywords),
-        archive: params.archive !== false,
+        keywords: normalizeKeywords(safeParams.keywords),
+        archive: safeParams.archive !== false,
       });
 
       let staged = null;
       if (commitSource === "both") {
         staged = runtime.commitStagedCandidates({
-          sessionId: normalizeText(params.sessionId),
-          scopes: params.scope ? [normalizeText(params.scope)] : [],
-          policy: normalizeText(params.policy) || "conservative",
-          archive: params.archive !== false,
-          limit: params.limit,
+          agentId: resolvedAgentId,
+          sessionId: resolvedSessionId,
+          scopes: safeParams.scope ? [normalizeText(safeParams.scope)] : [],
+          policy: normalizeText(safeParams.policy) || "conservative",
+          archive: safeParams.archive !== false,
+          limit: safeParams.limit,
         });
       }
 
@@ -2714,6 +2949,8 @@ const plugin = {
         archiveQuarantineRestoreParamsSchema,
         archiveQuarantinePurgeParamsSchema,
         archiveReportParamsSchema,
+        consistencyReportParamsSchema,
+        consistencyRepairParamsSchema,
         exportParamsSchema,
         importParamsSchema,
         stageListParamsSchema,

@@ -2,6 +2,7 @@
 
 class ImportExportManager {
   constructor(deps) {
+    this.resolveAgentId = deps.resolveAgentId;
     this.normalizeText = deps.normalizeText;
     this.normalizeSearchStatus = deps.normalizeSearchStatus;
     this.formatTimestamp = deps.formatTimestamp;
@@ -19,11 +20,16 @@ class ImportExportManager {
   }
 
   exportRecords(params = {}) {
+    const agentId = this.resolveAgentId(params.agentId);
     const format = this.normalizeText(params.format).toLowerCase() === "markdown" ? "markdown" : "json";
     const includeArchive = params.includeArchive === true;
-    const records = this.listRecords(params).map((record) => {
+    const records = this.listRecords({
+      ...params,
+      agentId,
+    }).map((record) => {
       if (format === "json") {
         return this.readRecordById(record.id, {
+          agentId,
           touchLastUsed: false,
           includeArchive,
         }) || { ...record };
@@ -45,6 +51,7 @@ class ImportExportManager {
         `- Type: ${this.normalizeText(params.type) || "(all)"}`,
         `- Scope: ${this.normalizeText(params.scope) || "(all)"}`,
         `- Session: ${this.normalizeText(params.sessionId) || "(all)"}`,
+        `- Agent: ${agentId}`,
         "",
       ];
       const sections = records.map((entry, index) => {
@@ -87,6 +94,7 @@ class ImportExportManager {
           count: records.length,
           format,
           filters: {
+            agentId,
             status: this.normalizeSearchStatus(params.status) || "active",
             type: this.normalizeText(params.type),
             scope: this.normalizeText(params.scope),
@@ -111,6 +119,7 @@ class ImportExportManager {
   }
 
   importRecords(params = {}) {
+    const agentId = this.resolveAgentId(params.agentId);
     const format = this.normalizeText(params.format).toLowerCase() || "json";
     const dryRun = params.dryRun === true;
     if (format !== "json") {
@@ -214,6 +223,7 @@ class ImportExportManager {
       const keywords = this.normalizeKeywords(entry && entry.keywords);
       const scopes = resolvedScope ? [resolvedScope] : this.resolveRuntimeScopes("", type);
       const importParams = {
+        agentId,
         title: l0Text,
         summary: l1Text,
         details: l2Text,
@@ -243,7 +253,11 @@ class ImportExportManager {
         let previewSupersededCount = 0;
         let previewStrategy = "append";
         for (const targetScope of scopes) {
-          const mergePlan = this.resolveMergePlan({ ...importParams, scope: targetScope }, layers, baseContentHash);
+          const mergePlan = this.resolveMergePlan(
+            { ...importParams, agentId, scope: targetScope },
+            layers,
+            baseContentHash,
+          );
           if (mergePlan.duplicate) {
             reusedScopes.push({
               scope: targetScope,
@@ -297,6 +311,7 @@ class ImportExportManager {
     }
 
     return {
+      agentId,
       dryRun,
       format,
       imported: results.length,

@@ -2,6 +2,50 @@
 
 本文档记录 `memory-hybrid-context` 的阶段性演进，用于后续版本维护、回归排查和发布说明。
 
+## 2026-03-18 v0.2.0 单网关强隔离落地
+
+本次更新包含运行时代码与文档双更新，不是纯设计稿。
+
+### 1. 运行时能力
+
+已实现：
+
+1. 插件版本升级到 `0.2.0`
+2. 新增 `isolation.mode`（默认 `agent`）与 `isolation.defaultAgentId`（默认 `main`）
+3. 主库核心表新增 `agent_id` 并补齐索引
+4. 写入/检索/治理链路统一按 `agent_id` 过滤（`global` 兼容模式除外）
+5. 归档路径改为按 agent 分桶：`<archive.dir>/<agentId>/...`
+6. 工具与 hook 链路自动注入 `agentId`
+7. CLI 增加 `--agent-id` 口径切换
+8. 记忆归档文件统一落在 `records/` 子目录（`agent` 模式：`<archive.dir>/<agentId>/records/...`；`global` 模式：`<archive.dir>/records/...`）
+9. `archive.dir` 默认值调整为 `~/.openclaw/memory-hybrid/archive`（避免与 `workspace` 会话工作区语义混用）
+
+### 2. 模块级改造
+
+已完成改造的核心模块：
+
+1. `src/core/*`（record/staging/store/project）
+2. `src/retrieval/retriever.js`
+3. `src/indexing/indexing-manager.js`
+4. `src/governance/*`（archive/consistency/lifecycle）
+5. `src/interfaces/*`（hooks/tools/cli/services/schema）
+6. `src/operations/*`（import-export/stats-policy）
+
+### 3. 文档同步
+
+同步更新：
+
+1. `README.zh-CN.md`
+2. `docs/CONFIG_REFERENCE.zh-CN.md`
+3. `docs/DEPLOY_AND_TEST.zh-CN.md`
+4. `docs/TESTING.zh-CN.md`
+5. `docs/AGENT_ISOLATION_DESIGN.zh-CN.md`
+
+更新目标：
+
+1. 把 `v0.2.0` 从“设计稿语义”切换为“已实现语义”
+2. 提供可直接执行的多 agent 隔离部署与验收路径
+
 ## 2026-03-17 语义检索增强
 
 本次更新把“可选高质量语义检索”补齐到可落地状态。

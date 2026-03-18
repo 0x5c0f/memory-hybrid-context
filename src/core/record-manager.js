@@ -4,6 +4,7 @@ class RecordManager {
   constructor(deps) {
     this.cfg = deps.cfg;
     this.ensureInitialized = deps.ensureInitialized;
+    this.resolveAgentId = deps.resolveAgentId;
     this.normalizeText = deps.normalizeText;
     this.parseJson = deps.parseJson;
     this.asJson = deps.asJson;
@@ -79,13 +80,14 @@ class RecordManager {
       .prepare(
         `SELECT id, title, summary, l0_text, l1_text, l2_text, content_hash, updated_at
            FROM memory_records
-          WHERE scope = ?
+          WHERE agent_id = ?
+            AND scope = ?
             AND type = ?
             AND status = 'active'
           ORDER BY updated_at DESC
           LIMIT 12`,
       )
-      .all(params.scope, params.type);
+      .all(params.agentId, params.scope, params.type);
   }
 
   resolveMergePlan(params, layers, contentHash) {
@@ -198,7 +200,7 @@ class RecordManager {
     };
   }
 
-  applySupersedePlan(ids, now) {
+  applySupersedePlan(ids, now, agentId) {
     const conn = this.ensureInitialized();
     const targetIds = Array.isArray(ids) ? ids.map((value) => this.normalizeText(value)).filter(Boolean) : [];
     if (targetIds.length === 0) {
@@ -210,9 +212,10 @@ class RecordManager {
         `UPDATE memory_records
             SET status = 'superseded',
                 updated_at = ?
-          WHERE id IN (${placeholders})`,
+          WHERE agent_id = ?
+            AND id IN (${placeholders})`,
       )
-      .run(now, ...targetIds);
+      .run(now, agentId, ...targetIds);
     return Number(result && result.changes ? result.changes : 0);
   }
 
@@ -221,16 +224,18 @@ class RecordManager {
       return null;
     }
 
-    const archiveDir = this.getArchiveDir();
+    const resolvedAgentId = this.resolveAgentId(params.agentId);
+    const archiveDir = this.getArchiveDir(resolvedAgentId);
     const layers = this.buildLayerTexts(params);
     const ts = Date.now();
     const parts = this.isoDateParts(ts);
     const slug = this.slugify(layers.l0 || params.title || params.summary).slice(0, 48);
     const fileName = `${parts.date}-${slug}.md`;
-    const filePath = this.getArchiveDir() ? require("node:path").join(archiveDir, fileName) : fileName;
+    const filePath = this.getArchiveDir() ? require("node:path").join(archiveDir, "records", fileName) : fileName;
     const lines = [
       `# Memory Commit: ${parts.date} ${parts.time} UTC`,
       "",
+      `- **Agent ID**: ${resolvedAgentId}`,
       `- **Scope**: ${params.scope}`,
       `- **Type**: ${params.type}`,
       `- **Importance**: ${params.importance}`,
@@ -272,6 +277,7 @@ class RecordManager {
 
   insertRecord(params) {
     const conn = this.ensureInitialized();
+    const resolvedAgentId = this.resolveAgentId(params.agentId);
     const now = Date.now();
     const scopes = Array.isArray(params.scopes) && params.scopes.length > 0 ? params.scopes : [params.scope];
     const created = [];
@@ -286,6 +292,7 @@ class RecordManager {
     for (const targetScope of scopes) {
       const scopedParams = {
         ...params,
+        agentId: resolvedAgentId,
         scope: targetScope,
       };
       const mergePlan = this.resolveMergePlan(scopedParams, layers, baseContentHash);
@@ -295,10 +302,12 @@ class RecordManager {
             `UPDATE memory_records
                 SET updated_at = ?,
                     last_used_at = ?
-              WHERE id = ?`,
+              WHERE id = ?
+                AND agent_id = ?`,
           )
-          .run(now, now, mergePlan.duplicate.id);
+          .run(now, now, mergePlan.duplicate.id, resolvedAgentId);
         reused.push({
+          agentId: resolvedAgentId,
           scope: targetScope,
           id: mergePlan.duplicate.id,
           title: mergePlan.duplicate.title,
@@ -308,7 +317,7 @@ class RecordManager {
         continue;
       }
 
-      supersededCount += this.applySupersedePlan(mergePlan.supersedeIds, now);
+      supersededCount += this.applySupersedePlan(mergePlan.supersedeIds, now, resolvedAgentId);
       const archivePath = this.writeArchive(scopedParams);
       const recordId = this.randomUUID();
       const contentRef = archivePath || `inline:${recordId}`;
@@ -328,15 +337,16 @@ class RecordManager {
       conn
         .prepare(
           `INSERT INTO memory_records (
-             id, scope, type, status, title, summary, l0_text, l1_text, l2_text, content_ref, raw_text,
+             id, agent_id, scope, type, status, title, summary, l0_text, l1_text, l2_text, content_ref, raw_text,
              keywords_json, embedding_json, content_hash, embedding_version, vector_backend, index_status, indexed_at,
              importance, confidence,
              session_id, source_path, start_line, end_line,
              created_at, updated_at, last_used_at, expires_at
-           ) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           recordId,
+          resolvedAgentId,
           targetScope,
           scopedParams.type,
           layers.l0,
@@ -366,6 +376,7 @@ class RecordManager {
         );
 
       this.recordIndexJob({
+        agentId: resolvedAgentId,
         recordId,
         jobType: "upsert",
         backend: vectorInfo.backend,
@@ -388,6 +399,7 @@ class RecordManager {
       }
 
       created.push({
+        agentId: resolvedAgentId,
         scope: targetScope,
         id: recordId,
         title: layers.l0,
@@ -405,11 +417,12 @@ class RecordManager {
     conn
       .prepare(
         `INSERT INTO commit_log (
-           id, session_id, archive_path, candidate_count, inserted_count, superseded_count, committed_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           id, agent_id, session_id, archive_path, candidate_count, inserted_count, superseded_count, committed_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         this.randomUUID(),
+        resolvedAgentId,
         params.sessionId || "manual",
         created[0]?.archivePath || null,
         Array.isArray(params.candidateIds) ? params.candidateIds.length : 1,
@@ -450,15 +463,16 @@ class RecordManager {
     const row =
       conn
         .prepare(
-          `SELECT id, scope, type, status, title, summary, l0_text, l1_text, l2_text, content_ref, raw_text,
+          `SELECT id, agent_id, scope, type, status, title, summary, l0_text, l1_text, l2_text, content_ref, raw_text,
                   keywords_json, content_hash, embedding_version, vector_backend, index_status, indexed_at,
                   importance, confidence, session_id, source_path,
                   created_at, updated_at, last_used_at, expires_at, expired_at
-             FROM memory_records
+            FROM memory_records
             WHERE id = ?
+              AND agent_id = ?
             LIMIT 1`,
         )
-        .get(id) || null;
+        .get(id, this.resolveAgentId(options.agentId)) || null;
 
     if (!row) {
       return null;
@@ -470,9 +484,10 @@ class RecordManager {
           `UPDATE memory_records
               SET last_used_at = ?,
                   updated_at = updated_at
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(Date.now(), id);
+        .run(Date.now(), id, this.resolveAgentId(options.agentId));
     }
 
     let archiveText = "";
@@ -482,6 +497,7 @@ class RecordManager {
 
     return {
       id: row.id,
+      agentId: row.agent_id || "",
       scope: row.scope,
       type: row.type,
       status: row.status,

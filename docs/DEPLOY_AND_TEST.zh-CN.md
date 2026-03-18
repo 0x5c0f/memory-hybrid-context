@@ -12,6 +12,11 @@
 
 1. [TESTING.zh-CN.md](./TESTING.zh-CN.md)
 
+说明：
+
+1. 本文档是 `v0.2.0` 现网可执行部署步骤
+2. 单网关强隔离（`agent_id`）已实现，默认 `isolation.mode = agent`
+
 ## 1. 前置条件
 
 1. OpenClaw 已可正常运行
@@ -21,6 +26,16 @@
    - `~/.openclaw/extensions`
 4. 如需高质量语义检索，需准备 embedding API：
    - 例如设置环境变量 `OPENAI_API_KEY`
+
+### 1.1 首次部署模式（推荐）
+
+如果你当前按“首次部署插件”执行（推荐）：
+
+1. 插件主库视为全新空库
+2. 历史记忆只在 `workspace` 文件里
+3. 通过迁移命令一次性导入到默认作用域
+
+这个模式下，不存在“旧库混合数据归属不清”的问题，部署风险最低。
 
 ## 2. 安装方式
 
@@ -112,16 +127,18 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
 
 1. 下面示例里的 `store.vector.backend = ann-local` 是推荐值，不是代码默认值。
 2. 当前代码默认值是 `store.vector.backend = sqlite-vec`。
+3. `scopes` 是语义分层，不是执行隔离；多 agent 隔离由 `isolation` 决定。
 
 个人用户最小策略（不开 `agent`）：
 
-1. 如果你是单人使用、没有多 agent 分工，建议直接使用：
+1. 这里的“不开 `agent`”指的是 `scopes.enabled` 不启用 `agent` 语义层，不是关闭隔离。
+2. 如果你是单人使用、没有多 agent 分工，建议直接使用：
    - `scopes.enabled = ["user", "project"]`
    - `scopes.primary = "user"`
    - `scopes.fallback = "project"`
    - `scopes.autoMirror = false`
    - `scopes.typeRouting.project` 里包含 `other`
-2. 这样可以在“个人偏好稳定”和“项目事实可召回”之间保持平衡。
+3. 这样可以在“个人偏好稳定”和“项目事实可召回”之间保持平衡。
 
 ```json
 {
@@ -153,7 +170,6 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
             "vector": {
               "enabled": true,
               "backend": "ann-local",
-              "extensionPath": "/home/cxd/.openclaw/workspace/.agents/vec0.so",
               "candidateLimit": 48,
               "probePerBand": 1,
               "embeddingVersion": "v1",
@@ -169,7 +185,7 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
           },
           "archive": {
             "enabled": true,
-            "dir": "/home/cxd/.openclaw/workspace/.memory-hybrid"
+            "dir": "/home/cxd/.openclaw/memory-hybrid/archive"
           },
           "capture": {
             "autoStage": true,
@@ -186,20 +202,46 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
             "defaultLevel": "L1"
           },
           "scopes": {
+            "enabled": ["user", "project"],
             "primary": "user",
             "fallback": "project",
-            "autoMirror": false
+            "autoMirror": false,
+            "typeRouting": {
+              "user": ["profile", "preference"],
+              "project": ["decision", "event", "todo", "entity", "case", "other"],
+              "agent": []
+            }
           },
           "projectResolver": {
             "enabled": true,
             "mode": "manual",
-            "workspacePath": "/home/cxd/.openclaw/workspace"
+            "workspacePath": "/home/cxd/.openclaw/workspace",
+            "manualKey": "openclaw-main",
+            "manualName": "OpenClaw Main"
+          },
+          "isolation": {
+            "mode": "agent",
+            "defaultAgentId": "main"
           }
         }
       }
     }
   }
 }
+```
+
+`projectResolver` 补充说明：
+
+1. 若使用 `mode = "manual"`，建议同时配置 `manualKey`；否则项目可能无法解析（除非你再执行 `openclaw mhm project use <key>`）
+2. 若使用 `mode = "auto"`，可不填 `manualKey`，让插件按 `manual -> git -> workspace` 顺序自动识别
+3. `workspacePath` 建议显式配置，避免回退到归档目录父路径导致项目键不符合预期
+
+如果你是从旧配置升级（旧值是 `/home/cxd/.openclaw/workspace/.memory-hybrid`）：
+
+1. 先切到新 `archive.dir`
+2. 再执行一次归档修复，更新库内 `source_path` 到新目录
+```bash
+openclaw mhm archive-repair --status all --limit 500
 ```
 
 ## 5. 启用步骤
@@ -247,7 +289,26 @@ openclaw mhm stats
    - `vector.embeddingMode = "openai-compatible"`
    - `vector.embeddingModel` 为你配置的模型名
 
-## 7. 部署后立即做的两件事
+## 7. 强隔离快速验证（`isolation.mode = agent`）
+
+1. 用两个 agent 写入不同测试数据：
+```bash
+openclaw mhm --agent-id agent-a commit "隔离测试：这是 A 侧记录" --type event --session iso-a
+openclaw mhm --agent-id agent-b commit "隔离测试：这是 B 侧记录" --type event --session iso-b
+```
+
+2. 交叉检索：
+```bash
+openclaw mhm --agent-id agent-a search "这是 A 侧记录" --status all --limit 5
+openclaw mhm --agent-id agent-b search "这是 A 侧记录" --status all --limit 5
+```
+
+通过标准：
+
+1. `agent-a` 能检索到 A 记录
+2. `agent-b` 默认检索不到 A 记录
+
+## 8. 部署后立即做的两件事
 
 1. 先看完整配置说明
    - [CONFIG_REFERENCE.zh-CN.md](./CONFIG_REFERENCE.zh-CN.md)

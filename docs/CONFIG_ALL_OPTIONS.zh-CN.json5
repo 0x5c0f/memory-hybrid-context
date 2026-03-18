@@ -140,12 +140,13 @@
             enabled: true,
 
             // 作用：归档目录。记忆 Markdown、会话快照写入此目录。
-            // 默认值（插件）："~/.openclaw/workspace/.memory-hybrid"
+            // 默认值（插件）："~/.openclaw/memory-hybrid/archive"
             // 兼容性说明：不要复用系统级 session-memory 常见目录（如 ~/.openclaw/workspace/memory），
             // 否则会与旧链路混写，导致归档来源混杂和治理困难。
             // 推荐：保持独立目录（本默认值），并与 store.path 分离（数据库与归档分离）。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：archive.dir）
-            dir: "~/.openclaw/workspace/.memory-hybrid",
+            // 升级提示：若你此前使用旧目录 ~/.openclaw/workspace/.memory-hybrid，切换后请执行 archive-repair 对齐 source_path。
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：archive.dir）
+            dir: "~/.openclaw/memory-hybrid/archive",
 
             // 作用：是否写 Markdown 归档。
             // 默认值（插件）：true
@@ -171,7 +172,7 @@
             // 开启后行为：会把模型回复中的文本也当作“可沉淀候选”，可能提高“流程结论”沉淀率。
             // 风险：若回复包含猜测/幻觉/临时表述，可能被错误沉淀（自污染风险上升）。
             // 建议：只有在回复风格稳定、且有严格审核流程时再开启；常规场景保持 false。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：capture.captureAssistant）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：capture.captureAssistant）
             captureAssistant: false,
           },
 
@@ -214,6 +215,8 @@
           recall: {
             // 作用：自动召回开关。
             // 默认值（插件）：true
+            // 触发边界：系统命令启动提示（如 /new /reset 的 startup 提示）默认不会注入 recall 包；
+            // 仅在真实用户提问场景触发，避免把 recall 块展示在系统提示中。
             auto: true,
 
             // 作用：单次召回最多注入记录数。
@@ -236,7 +239,7 @@
             // 作用：混合检索（FTS + 向量）开关。
             // 默认值（插件）：true
             // true：先做关键词+向量融合，召回更稳健；false：走单路检索，策略更简单。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.hybrid）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：query.hybrid）
             hybrid: true,
 
             // 作用：FTS 权重。
@@ -244,7 +247,7 @@
             // 范围（schema）：0 ~ 1
             // 调大影响：关键词精确匹配更强（术语/路径/ID/短语更容易命中）。
             // 调小影响：语义匹配占比提高，表述不一致时更容易召回。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.ftsWeight）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：query.ftsWeight）
             ftsWeight: 0.35,
 
             // 作用：向量权重。
@@ -253,13 +256,13 @@
             // 调大影响：语义相似优先，容忍改写与同义表达；但可能引入语义近邻噪声。
             // 调小影响：更依赖关键词，结果更“字面匹配”。
             // 建议：与 ftsWeight 一起调，二者总和建议接近 1。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.vectorWeight）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：query.vectorWeight）
             vectorWeight: 0.65,
 
             // 作用：检索后二次重排开关。
             // 默认值（插件）：false
             // true：增加一次排序成本，通常提升 Top-N 质量；false：延迟更低。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：query.rerank）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：query.rerank）
             rerank: false,
           },
 
@@ -267,30 +270,31 @@
             // 作用：启用的作用域集合。
             // 默认值（插件）：["user","project"]
             // 可选元素："user" | "project" | "agent"
+            // 关键区别：scope 是“语义分层”，不是“执行隔离”；多 agent 硬隔离由 isolation.mode 控制。
             // 语义说明：
             // - user：跨会话用户长期偏好/个人信息（稳定、可复用）
             // - project：项目级决策/实体/待办/事件（按项目边界组织）
             // - agent：代理执行模式/策略模板（偏运行方法论）
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.enabled）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：scopes.enabled）
             enabled: ["user", "project"],
 
             // 作用：主作用域。
             // 默认值（插件）："user"
             // 效果：未显式指定 scope 时，优先写入/查询该作用域。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.primary）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：scopes.primary）
             primary: "user",
 
             // 作用：回退作用域。
             // 默认值（插件）："project"
             // 效果：主作用域结果不足时，从此作用域补召回。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.fallback）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：scopes.fallback）
             fallback: "project",
 
             // 作用：是否自动镜像写入多作用域。
             // 默认值（插件）：false
             // true：同一条记忆可写入主/回退多个作用域，召回概率更高但重复风险上升。
             // false：单作用域写入，治理和去重更容易。
-            // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.autoMirror）
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：scopes.autoMirror）
             autoMirror: false,
 
             typeRouting: {
@@ -302,7 +306,7 @@
               // - agent：当前 agent 的执行方法模板（SOP）
               // 兜底建议：可把 "other" 放到 project，避免未分类内容污染 user。
               // 冲突说明：同一类型不要重复放多个 scope；若重复，当前实现按 user -> project -> agent 顺序命中。
-              // 文档：./docs/CONFIG_REFERENCE.zh-CN.md（小节：scopes.typeRouting）
+              // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：scopes.typeRouting）
 
               // 作用：这些类型优先路由到 user 作用域。
               // 默认值（插件）：["profile","preference"]
@@ -330,23 +334,32 @@
           projectResolver: {
             // 作用：项目解析总开关。
             // 默认值（插件）：true
+            // 说明：仅控制 project 绑定，不是多 agent 隔离开关（隔离看 isolation.mode）。
             enabled: true,
 
             // 作用：项目解析模式。
             // 默认值（插件）："auto"
             // 可选值："auto" | "manual" | "workspace" | "git"
+            // 说明：
+            // - manual: 用 manualKey/manualName（或运行期 project use 覆盖）
+            // - workspace: 按工作区路径识别
+            // - git: 按 git 根目录 / origin 识别
+            // - auto: 按 manual -> git -> workspace 顺序尝试
             mode: "auto",
 
-            // 作用：workspace 模式下用于计算项目键的工作区路径。
+            // 作用：workspace/git 模式下用于计算项目键的工作区路径。
             // 默认值（插件）：""
+            // 说明：为空时会回退到“归档目录父路径”；建议显式填写，避免项目键漂移。
             workspacePath: "",
 
             // 作用：manual 模式下固定项目 key。
             // 默认值（插件）：""
+            // 说明：mode=manual 时建议必填；否则需用 `openclaw mhm project use <key>` 运行期覆盖。
             manualKey: "",
 
             // 作用：manual 模式下固定项目显示名。
             // 默认值（插件）：""
+            // 说明：仅展示用途，不参与唯一性判定（唯一性看 project key）。
             manualName: "",
           },
 
@@ -374,6 +387,22 @@
             // 默认值（插件）：30
             // 范围（schema）：0 ~ 3650
             purgeAfterDays: 30,
+          },
+
+          isolation: {
+            // 作用：单网关隔离模式。
+            // 默认值（插件）："agent"
+            // 可选值："agent" | "global"
+            // agent：按 agent_id 强隔离；写入/检索/治理都按 agent 过滤。
+            // global：兼容模式；统一写到 agent_id=global，所有 agent 共享同一记忆视图，归档落在 <archive.dir>/records/。
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：isolation.mode）
+            mode: "agent",
+
+            // 作用：当当前调用链拿不到 agentId 时的兜底 agent。
+            // 默认值（插件）："main"
+            // 注意：在 mode=agent 时，此值也会影响归档子目录路径。
+            // 文档：./CONFIG_REFERENCE.zh-CN.md（小节：isolation.defaultAgentId）
+            defaultAgentId: "main",
           },
         },
       },

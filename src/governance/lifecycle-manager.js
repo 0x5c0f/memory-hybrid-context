@@ -8,9 +8,9 @@ class LifecycleManager {
     this.deps = deps;
   }
 
-  deleteArchiveFile(sourcePath) {
+  deleteArchiveFile(sourcePath, agentId) {
     const normalized = this.deps.normalizeText(sourcePath);
-    const archiveDir = this.deps.getArchiveDir();
+    const archiveDir = this.deps.getArchiveDir(this.deps.resolveAgentId(agentId));
     if (!normalized || !archiveDir) {
       return false;
     }
@@ -36,26 +36,34 @@ class LifecycleManager {
 
   countExpiredRecords() {
     const conn = this.deps.ensureInitialized();
-    return conn.prepare("SELECT COUNT(*) AS c FROM memory_records WHERE status = 'expired'").get().c || 0;
+    const agentId = this.deps.resolveAgentId();
+    return conn
+      .prepare("SELECT COUNT(*) AS c FROM memory_records WHERE agent_id = ? AND status = 'expired'")
+      .get(agentId).c || 0;
   }
 
   countForgottenRecords() {
     const conn = this.deps.ensureInitialized();
-    return conn.prepare("SELECT COUNT(*) AS c FROM memory_records WHERE status = 'forgotten'").get().c || 0;
+    const agentId = this.deps.resolveAgentId();
+    return conn
+      .prepare("SELECT COUNT(*) AS c FROM memory_records WHERE agent_id = ? AND status = 'forgotten'")
+      .get(agentId).c || 0;
   }
 
   countPendingExpiry() {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId();
     return (
       conn
         .prepare(
           `SELECT COUNT(*) AS c
              FROM memory_records
-            WHERE status = 'active'
+            WHERE agent_id = ?
+              AND status = 'active'
               AND expires_at IS NOT NULL
               AND expires_at <= ?`,
         )
-        .get(Date.now()).c || 0
+        .get(agentId, Date.now()).c || 0
     );
   }
 
@@ -66,20 +74,23 @@ class LifecycleManager {
       return 0;
     }
     const cutoff = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+    const agentId = this.deps.resolveAgentId();
     return (
       conn
         .prepare(
           `SELECT COUNT(*) AS c
              FROM memory_records
-            WHERE status = 'expired'
+            WHERE agent_id = ?
+              AND status = 'expired'
               AND COALESCE(expired_at, updated_at) <= ?`,
         )
-        .get(cutoff).c || 0
+        .get(agentId, cutoff).c || 0
     );
   }
 
   forgetRecords(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const requestedIds = Array.isArray(params.ids)
       ? params.ids.map((value) => this.deps.normalizeText(value)).filter(Boolean)
       : [];
@@ -106,8 +117,8 @@ class LifecycleManager {
       };
     }
 
-    const clauses = ["status = 'active'"];
-    const values = [];
+    const clauses = ["agent_id = ?", "status = 'active'"];
+    const values = [agentId];
     if (requestedIds.length > 0) {
       const placeholders = requestedIds.map(() => "?").join(", ");
       clauses.push(`id IN (${placeholders})`);
@@ -178,20 +189,22 @@ class LifecycleManager {
                   last_error = ?,
                   updated_at = ?
             WHERE record_id = ?
+              AND agent_id = ?
               AND status IN ('pending', 'running')`,
         )
-        .run(now, "record forgotten", now, row.id);
+        .run(now, "record forgotten", now, row.id, agentId);
       jobsSkipped += Number(skipped && skipped.changes ? skipped.changes : 0);
 
       conn
         .prepare(
           `UPDATE memory_records
-              SET status = 'forgotten',
+            SET status = 'forgotten',
                   index_status = 'forgotten',
                   updated_at = ?
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(now, row.id);
+        .run(now, row.id, agentId);
       forgotten += 1;
     }
 
@@ -201,6 +214,7 @@ class LifecycleManager {
       forgotten,
       jobsSkipped,
       filters: {
+        agentId,
         ids: requestedIds,
         sessionId,
         scope,
@@ -213,6 +227,7 @@ class LifecycleManager {
 
   cleanupExpiredRecords(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const now = Date.now();
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(params.limit) || 100)));
     const dryRun = params.dryRun === true;
@@ -220,13 +235,14 @@ class LifecycleManager {
       .prepare(
         `SELECT id, scope, type, title, expires_at, index_status
            FROM memory_records
-          WHERE status = 'active'
+          WHERE agent_id = ?
+            AND status = 'active'
             AND expires_at IS NOT NULL
             AND expires_at <= ?
           ORDER BY expires_at ASC
           LIMIT ?`,
       )
-      .all(now, limit);
+      .all(agentId, now, limit);
 
     const preview = rows.map((row) => ({
       id: row.id,
@@ -261,9 +277,10 @@ class LifecycleManager {
                   last_error = ?,
                   updated_at = ?
             WHERE record_id = ?
+              AND agent_id = ?
               AND status IN ('pending', 'running')`,
         )
-        .run(now, "record expired", now, row.id);
+        .run(now, "record expired", now, row.id, agentId);
 
       jobsSkipped += Number(skipped && skipped.changes ? skipped.changes : 0);
 
@@ -274,9 +291,10 @@ class LifecycleManager {
                   index_status = 'expired',
                   expired_at = COALESCE(expired_at, ?),
                   updated_at = ?
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(now, now, row.id);
+        .run(now, now, row.id, agentId);
       cleaned += 1;
     }
 
@@ -291,6 +309,7 @@ class LifecycleManager {
 
   purgeExpiredRecords(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const now = Date.now();
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(params.limit) || 100)));
     const dryRun = params.dryRun === true;
@@ -327,8 +346,8 @@ class LifecycleManager {
       };
     }
 
-    const clauses = [];
-    const values = [];
+    const clauses = ["agent_id = ?"];
+    const values = [agentId];
     if (hasDirectFilters) {
       if (requestedIds.length > 0) {
         const placeholders = requestedIds.map(() => "?").join(", ");
@@ -401,13 +420,13 @@ class LifecycleManager {
     let deletedArchives = 0;
 
     for (const row of rows) {
-      if (this.deleteArchiveFile(row.source_path)) {
+      if (this.deleteArchiveFile(row.source_path, agentId)) {
         deletedArchives += 1;
       }
 
       conn.prepare("DELETE FROM memory_fts_docs WHERE id = ?").run(row.id);
       this.deps.vectorBackend.deleteNativeEmbedding(conn, row.id);
-      conn.prepare("DELETE FROM memory_records WHERE id = ?").run(row.id);
+      conn.prepare("DELETE FROM memory_records WHERE id = ? AND agent_id = ?").run(row.id, agentId);
       purged += 1;
     }
 
@@ -418,6 +437,7 @@ class LifecycleManager {
       deletedArchives,
       retentionDays,
       filters: {
+        agentId,
         ids: requestedIds,
         sessionId,
         scope,
@@ -430,6 +450,7 @@ class LifecycleManager {
 
   restoreExpiredRecords(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const requestedIds = Array.isArray(params.ids)
       ? params.ids.map((value) => this.deps.normalizeText(value)).filter(Boolean)
       : [];
@@ -437,8 +458,8 @@ class LifecycleManager {
     const scope = this.deps.normalizeText(params.scope);
     const memoryType = this.deps.normalizeText(params.type).toLowerCase();
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(params.limit) || 20)));
-    const clauses = ["status = 'expired'"];
-    const values = [];
+    const clauses = ["agent_id = ?", "status = 'expired'"];
+    const values = [agentId];
     if (requestedIds.length > 0) {
       const placeholders = requestedIds.map(() => "?").join(", ");
       clauses.push(`id IN (${placeholders})`);
@@ -499,9 +520,10 @@ class LifecycleManager {
                   expires_at = ?,
                   expired_at = NULL,
                   updated_at = ?
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(renewedExpiresAt, now, row.id);
+        .run(renewedExpiresAt, now, row.id, agentId);
       restored += 1;
 
       const pending =
@@ -509,14 +531,16 @@ class LifecycleManager {
           .prepare(
             `SELECT 1
                FROM index_jobs
-              WHERE record_id = ?
+              WHERE agent_id = ?
+                AND record_id = ?
                 AND status IN ('pending', 'running')
               LIMIT 1`,
           )
-          .get(row.id) || null;
+          .get(agentId, row.id) || null;
 
       if (!pending) {
         this.deps.recordIndexJob({
+          agentId,
           recordId: row.id,
           jobType: "restore",
           backend: vectorInfo.backend,
@@ -541,13 +565,14 @@ class LifecycleManager {
     }
 
     if (this.deps.cfg.indexing.async === false && queued > 0) {
-      this.deps.processIndexJobs({ limit: queued, drain: true });
+      this.deps.processIndexJobs({ agentId, limit: queued, drain: true });
     }
 
     return {
       restored,
       queued,
       filters: {
+        agentId,
         ids: requestedIds,
         sessionId,
         scope,

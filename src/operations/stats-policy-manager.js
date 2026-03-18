@@ -4,6 +4,7 @@ class StatsPolicyManager {
   constructor(deps) {
     this.cfg = deps.cfg;
     this.ensureInitialized = deps.ensureInitialized;
+    this.resolveAgentId = deps.resolveAgentId;
     this.normalizeText = deps.normalizeText;
     this.computeAutoExpiryForType = deps.computeAutoExpiryForType;
     this.resolveRoutedScopeByType = deps.resolveRoutedScopeByType;
@@ -12,14 +13,16 @@ class StatsPolicyManager {
 
   getTypeBreakdown() {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId();
     const rows = conn
       .prepare(
         `SELECT type, status, COUNT(*) AS c
            FROM memory_records
+          WHERE agent_id = ?
           GROUP BY type, status
           ORDER BY type ASC, status ASC`,
       )
-      .all();
+      .all(agentId);
 
     const grouped = new Map();
     for (const row of rows) {
@@ -50,14 +53,16 @@ class StatsPolicyManager {
 
   getScopeBreakdown() {
     const conn = this.ensureInitialized();
+    const agentId = this.resolveAgentId();
     const rows = conn
       .prepare(
         `SELECT scope, status, COUNT(*) AS c
            FROM memory_records
+          WHERE agent_id = ?
           GROUP BY scope, status
           ORDER BY scope ASC, status ASC`,
       )
-      .all();
+      .all(agentId);
 
     const grouped = new Map();
     for (const row of rows) {
@@ -182,6 +187,11 @@ class StatsPolicyManager {
       },
       vector: {
         ...this.vectorBackend.info(),
+      },
+      isolation: {
+        mode: this.normalizeText(this.cfg.isolation?.mode) || "agent",
+        defaultAgentId: this.normalizeText(this.cfg.isolation?.defaultAgentId) || "main",
+        activeAgentId: this.resolveAgentId(),
       },
       projectResolver: {
         enabled: this.cfg.projectResolver.enabled !== false,

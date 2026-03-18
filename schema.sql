@@ -3,6 +3,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS memory_records (
   id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL DEFAULT 'global',
   scope TEXT NOT NULL,
   type TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS memory_relations (
 
 CREATE TABLE IF NOT EXISTS staging_candidates (
   id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL DEFAULT 'global',
   session_id TEXT NOT NULL,
   role TEXT NOT NULL,
   raw_text TEXT NOT NULL,
@@ -66,6 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_staging_created_at ON staging_candidates(created_
 
 CREATE TABLE IF NOT EXISTS commit_log (
   id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL DEFAULT 'global',
   session_id TEXT NOT NULL,
   archive_path TEXT,
   candidate_count INTEGER NOT NULL DEFAULT 0,
@@ -76,6 +79,7 @@ CREATE TABLE IF NOT EXISTS commit_log (
 
 CREATE TABLE IF NOT EXISTS index_jobs (
   id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL DEFAULT 'global',
   record_id TEXT NOT NULL,
   job_type TEXT NOT NULL,
   backend TEXT NOT NULL,
@@ -96,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_index_jobs_record ON index_jobs(record_id);
 
 CREATE TABLE IF NOT EXISTS index_failures (
   id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL DEFAULT 'global',
   job_id TEXT,
   record_id TEXT,
   backend TEXT,
@@ -151,6 +156,7 @@ CREATE TABLE IF NOT EXISTS plugin_state (
 
 CREATE TABLE IF NOT EXISTS recall_events (
   id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL DEFAULT 'global',
   session_id TEXT,
   query_text TEXT NOT NULL,
   query_scope TEXT,

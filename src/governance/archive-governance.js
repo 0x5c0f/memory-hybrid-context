@@ -8,13 +8,13 @@ class ArchiveGovernanceManager {
     this.deps = deps;
   }
 
-  getArchiveDir() {
-    return this.deps.getArchiveDir();
+  getArchiveDir(rawAgentId) {
+    return this.deps.getArchiveDir(this.deps.resolveAgentId(rawAgentId));
   }
 
-  isManagedArchivePath(filePath) {
+  isManagedArchivePath(filePath, rawAgentId) {
     const normalized = this.deps.normalizeText(filePath);
-    const archiveDir = this.getArchiveDir();
+    const archiveDir = this.getArchiveDir(rawAgentId);
     if (!normalized || !archiveDir) {
       return false;
     }
@@ -31,6 +31,7 @@ class ArchiveGovernanceManager {
     const lines = [
       `# Memory Commit: ${parts.date} ${parts.time} UTC`,
       "",
+      `- **Agent ID**: ${record.agentId || ""}`,
       `- **Scope**: ${record.scope}`,
       `- **Type**: ${record.type}`,
       `- **Importance**: ${record.importance}`,
@@ -64,25 +65,27 @@ class ArchiveGovernanceManager {
     return `${lines.join("\n")}\n`;
   }
 
-  buildArchiveRepairPath(record) {
-    const archiveDir = this.getArchiveDir();
-    if (this.isManagedArchivePath(record.sourcePath)) {
+  buildArchiveRepairPath(record, rawAgentId) {
+    const agentId = this.deps.resolveAgentId(rawAgentId || record.agentId);
+    const archiveDir = this.getArchiveDir(agentId);
+    if (this.isManagedArchivePath(record.sourcePath, agentId)) {
       return this.deps.stablePathKey(record.sourcePath);
     }
     const timestamp = Number.isFinite(Number(record.createdAt)) ? Number(record.createdAt) : Date.now();
     const parts = this.deps.isoDateParts(timestamp);
     const slug = this.deps.slugify(record.l0Text || record.title || record.summary).slice(0, 48);
     const baseName = `${parts.date}-${slug}.md`;
-    const primaryPath = path.join(archiveDir, baseName);
+    const primaryPath = path.join(archiveDir, "records", baseName);
     if (!fs.existsSync(primaryPath)) {
       return primaryPath;
     }
     const fallbackName = `${parts.date}-${slug}-${String(record.id || "").slice(0, 8) || "repair"}.md`;
-    return path.join(archiveDir, fallbackName);
+    return path.join(archiveDir, "records", fallbackName);
   }
 
   listManagedArchiveFiles(params = {}) {
-    const archiveDir = this.getArchiveDir();
+    const agentId = this.deps.resolveAgentId(params.agentId);
+    const archiveDir = this.getArchiveDir(agentId);
     const limit = Math.max(1, Math.min(5000, Math.floor(Number(params.limit) || 200)));
     if (!archiveDir || !fs.existsSync(archiveDir)) {
       return {
@@ -131,6 +134,7 @@ class ArchiveGovernanceManager {
     }
 
     return {
+      agentId,
       limit,
       scannedFiles: results.length,
       files: results,
@@ -139,8 +143,10 @@ class ArchiveGovernanceManager {
 
   auditArchiveRecords(params = {}) {
     this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(500, Math.floor(Number(params.limit) || 50)));
     const records = this.deps.listRecords({
+      agentId,
       scope: params.scope,
       sessionId: params.sessionId,
       type: params.type,
@@ -148,9 +154,14 @@ class ArchiveGovernanceManager {
       limit,
     });
     const results = records.map((entry) => {
-      const record = this.deps.readRecordById(entry.id, { touchLastUsed: false, includeArchive: false }) || entry;
+      const record =
+        this.deps.readRecordById(entry.id, {
+          agentId,
+          touchLastUsed: false,
+          includeArchive: false,
+        }) || entry;
       const hasSourcePath = Boolean(this.deps.normalizeText(record.sourcePath));
-      const managed = this.isManagedArchivePath(record.sourcePath);
+      const managed = this.isManagedArchivePath(record.sourcePath, agentId);
       const exists = hasSourcePath && fs.existsSync(record.sourcePath);
       let state = "ok";
       if (!hasSourcePath) {
@@ -184,6 +195,7 @@ class ArchiveGovernanceManager {
     };
 
     return {
+      agentId,
       limit,
       summary,
       results,
@@ -192,13 +204,18 @@ class ArchiveGovernanceManager {
 
   repairArchiveRecords(params = {}) {
     const conn = this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const dryRun = params.dryRun === true;
-    const audit = this.auditArchiveRecords(params);
+    const audit = this.auditArchiveRecords({
+      ...params,
+      agentId,
+    });
     const targets = audit.results.filter((entry) => entry.state !== "ok");
 
     if (dryRun || targets.length === 0) {
       return {
         dryRun,
+        agentId,
         matched: targets.length,
         repaired: 0,
         records: targets,
@@ -209,11 +226,18 @@ class ArchiveGovernanceManager {
     let repaired = 0;
     const records = [];
     for (const entry of targets) {
-      const record = this.deps.readRecordById(entry.id, { touchLastUsed: false, includeArchive: false });
+      const record = this.deps.readRecordById(entry.id, {
+        agentId,
+        touchLastUsed: false,
+        includeArchive: false,
+      });
       if (!record) {
         continue;
       }
-      const targetPath = this.buildArchiveRepairPath(record);
+      if (this.deps.resolveAgentId(record.agentId) !== agentId) {
+        continue;
+      }
+      const targetPath = this.buildArchiveRepairPath(record, agentId);
       const content = this.buildArchiveContentFromRecord(record);
       this.deps.writeTextFile(targetPath, content);
 
@@ -223,13 +247,15 @@ class ArchiveGovernanceManager {
               SET source_path = ?,
                   content_ref = ?,
                   updated_at = ?
-            WHERE id = ?`,
+            WHERE id = ?
+              AND agent_id = ?`,
         )
-        .run(targetPath, targetPath, now, record.id);
+        .run(targetPath, targetPath, now, record.id, agentId);
 
       repaired += 1;
       records.push({
         id: record.id,
+        agentId,
         previousState: entry.state,
         repairedPath: targetPath,
       });
@@ -237,6 +263,7 @@ class ArchiveGovernanceManager {
 
     return {
       dryRun: false,
+      agentId,
       matched: targets.length,
       repaired,
       records,
@@ -245,16 +272,21 @@ class ArchiveGovernanceManager {
 
   auditOrphanArchiveFiles(params = {}) {
     const conn = this.deps.ensureInitialized();
-    const scan = this.listManagedArchiveFiles(params);
+    const agentId = this.deps.resolveAgentId(params.agentId);
+    const scan = this.listManagedArchiveFiles({
+      ...params,
+      agentId,
+    });
     const referenced = new Set(
       conn
         .prepare(
           `SELECT source_path
              FROM memory_records
-            WHERE source_path IS NOT NULL
+            WHERE agent_id = ?
+              AND source_path IS NOT NULL
               AND TRIM(source_path) <> ''`,
         )
-        .all()
+        .all(agentId)
         .map((row) => this.deps.stablePathKey(row.source_path))
         .filter(Boolean),
     );
@@ -274,6 +306,7 @@ class ArchiveGovernanceManager {
       }));
 
     return {
+      agentId,
       limit: scan.limit,
       includeSessions: params.includeSessions === true,
       summary: {
@@ -284,8 +317,8 @@ class ArchiveGovernanceManager {
     };
   }
 
-  buildArchiveQuarantinePath(filePath) {
-    const archiveDir = this.getArchiveDir();
+  buildArchiveQuarantinePath(filePath, rawAgentId) {
+    const archiveDir = this.getArchiveDir(rawAgentId);
     const quarantineRoot = path.join(archiveDir, "quarantine");
     const relativePath = path.relative(archiveDir, filePath);
     const targetPath = path.join(quarantineRoot, relativePath);
@@ -298,8 +331,12 @@ class ArchiveGovernanceManager {
   }
 
   quarantineOrphanArchiveFiles(params = {}) {
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const dryRun = params.dryRun === true;
-    const audit = this.auditOrphanArchiveFiles(params);
+    const audit = this.auditOrphanArchiveFiles({
+      ...params,
+      agentId,
+    });
     const targets = audit.results;
     if (dryRun || targets.length === 0) {
       return {
@@ -308,7 +345,7 @@ class ArchiveGovernanceManager {
         moved: 0,
         results: targets.map((entry) => ({
           fromPath: entry.path,
-          toPath: this.buildArchiveQuarantinePath(entry.path),
+          toPath: this.buildArchiveQuarantinePath(entry.path, agentId),
           size: entry.size,
         })),
       };
@@ -320,7 +357,7 @@ class ArchiveGovernanceManager {
       if (!fs.existsSync(entry.path)) {
         continue;
       }
-      const targetPath = this.buildArchiveQuarantinePath(entry.path);
+      const targetPath = this.buildArchiveQuarantinePath(entry.path, agentId);
       this.deps.ensureDir(path.dirname(targetPath));
       fs.renameSync(entry.path, targetPath);
       moved += 1;
@@ -333,6 +370,7 @@ class ArchiveGovernanceManager {
 
     return {
       dryRun: false,
+      agentId,
       matched: targets.length,
       moved,
       results: movedResults,
@@ -341,11 +379,13 @@ class ArchiveGovernanceManager {
 
   listQuarantinedArchiveFiles(params = {}) {
     this.deps.ensureInitialized();
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const limit = Math.max(1, Math.min(5000, Math.floor(Number(params.limit) || 200)));
-    const archiveDir = this.getArchiveDir();
+    const archiveDir = this.getArchiveDir(agentId);
     const quarantineRoot = archiveDir ? path.join(archiveDir, "quarantine") : "";
     if (!quarantineRoot || !fs.existsSync(quarantineRoot)) {
       return {
+        agentId,
         limit,
         count: 0,
         results: [],
@@ -388,14 +428,15 @@ class ArchiveGovernanceManager {
     }
 
     return {
+      agentId,
       limit,
       count: results.length,
       results,
     };
   }
 
-  buildArchiveRestorePathFromQuarantine(filePath) {
-    const archiveDir = this.getArchiveDir();
+  buildArchiveRestorePathFromQuarantine(filePath, rawAgentId) {
+    const archiveDir = this.getArchiveDir(rawAgentId);
     const quarantineRoot = path.join(archiveDir, "quarantine");
     const relativePath = path.relative(quarantineRoot, filePath);
     const targetPath = path.join(archiveDir, relativePath);
@@ -408,12 +449,16 @@ class ArchiveGovernanceManager {
   }
 
   restoreQuarantinedArchiveFiles(params = {}) {
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const dryRun = params.dryRun === true;
-    const listed = this.listQuarantinedArchiveFiles({ limit: params.limit });
+    const listed = this.listQuarantinedArchiveFiles({
+      agentId,
+      limit: params.limit,
+    });
     const requestedPaths = Array.isArray(params.paths)
       ? params.paths.map((value) => this.deps.normalizeText(value)).filter(Boolean)
       : [];
-    const archiveDir = this.getArchiveDir();
+    const archiveDir = this.getArchiveDir(agentId);
     const quarantineRoot = archiveDir ? path.join(archiveDir, "quarantine") : "";
     const normalizedRequested = new Set(
       requestedPaths.map((value) => {
@@ -431,11 +476,12 @@ class ArchiveGovernanceManager {
     if (dryRun || targets.length === 0) {
       return {
         dryRun,
+        agentId,
         matched: targets.length,
         restored: 0,
         results: targets.map((entry) => ({
           fromPath: entry.path,
-          toPath: this.buildArchiveRestorePathFromQuarantine(entry.path),
+          toPath: this.buildArchiveRestorePathFromQuarantine(entry.path, agentId),
           size: entry.size,
         })),
       };
@@ -447,7 +493,7 @@ class ArchiveGovernanceManager {
       if (!fs.existsSync(entry.path)) {
         continue;
       }
-      const targetPath = this.buildArchiveRestorePathFromQuarantine(entry.path);
+      const targetPath = this.buildArchiveRestorePathFromQuarantine(entry.path, agentId);
       this.deps.ensureDir(path.dirname(targetPath));
       fs.renameSync(entry.path, targetPath);
       restored += 1;
@@ -460,6 +506,7 @@ class ArchiveGovernanceManager {
 
     return {
       dryRun: false,
+      agentId,
       matched: targets.length,
       restored,
       results,
@@ -467,12 +514,16 @@ class ArchiveGovernanceManager {
   }
 
   purgeQuarantinedArchiveFiles(params = {}) {
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const dryRun = params.dryRun === true;
-    const listed = this.listQuarantinedArchiveFiles({ limit: params.limit });
+    const listed = this.listQuarantinedArchiveFiles({
+      agentId,
+      limit: params.limit,
+    });
     const requestedPaths = Array.isArray(params.paths)
       ? params.paths.map((value) => this.deps.normalizeText(value)).filter(Boolean)
       : [];
-    const archiveDir = this.getArchiveDir();
+    const archiveDir = this.getArchiveDir(agentId);
     const quarantineRoot = archiveDir ? path.join(archiveDir, "quarantine") : "";
     const normalizedRequested = new Set(
       requestedPaths.map((value) => {
@@ -490,6 +541,7 @@ class ArchiveGovernanceManager {
     if (dryRun || targets.length === 0) {
       return {
         dryRun,
+        agentId,
         matched: targets.length,
         purged: 0,
         results: targets.map((entry) => ({
@@ -517,6 +569,7 @@ class ArchiveGovernanceManager {
 
     return {
       dryRun: false,
+      agentId,
       matched: targets.length,
       purged,
       results,
@@ -524,11 +577,13 @@ class ArchiveGovernanceManager {
   }
 
   getArchiveAuditReport(params = {}) {
+    const agentId = this.deps.resolveAgentId(params.agentId);
     const recordLimit = Math.max(1, Math.min(500, Math.floor(Number(params.recordLimit || params.limit) || 50)));
     const orphanLimit = Math.max(1, Math.min(5000, Math.floor(Number(params.orphanLimit || params.limit) || 200)));
     const quarantineLimit = Math.max(1, Math.min(5000, Math.floor(Number(params.quarantineLimit || params.limit) || 200)));
 
     const linked = this.auditArchiveRecords({
+      agentId,
       scope: params.scope,
       sessionId: params.sessionId,
       type: params.type,
@@ -536,18 +591,21 @@ class ArchiveGovernanceManager {
       limit: recordLimit,
     });
     const orphan = this.auditOrphanArchiveFiles({
+      agentId,
       limit: orphanLimit,
       includeSessions: params.includeSessions === true,
     });
     const quarantine = this.listQuarantinedArchiveFiles({
+      agentId,
       limit: quarantineLimit,
     });
     const vectorHealth =
-      typeof this.deps.getVectorHealth === "function" ? this.deps.getVectorHealth() : null;
+      typeof this.deps.getVectorHealth === "function" ? this.deps.getVectorHealth(agentId) : null;
 
     return {
       generatedAt: Date.now(),
       filters: {
+        agentId,
         scope: this.deps.normalizeText(params.scope),
         sessionId: this.deps.normalizeText(params.sessionId),
         type: this.deps.normalizeText(params.type),
@@ -596,6 +654,7 @@ class ArchiveGovernanceManager {
       "",
       "## Filters",
       "",
+      `- Agent: ${filters.agentId || "(default)"}`,
       `- Scope: ${filters.scope || "(all)"}`,
       `- Session: ${filters.sessionId || "(all)"}`,
       `- Type: ${filters.type || "(all)"}`,

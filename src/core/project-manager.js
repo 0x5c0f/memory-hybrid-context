@@ -4,6 +4,7 @@ class ProjectManager {
   constructor(deps) {
     this.cfg = deps.cfg;
     this.ensureInitialized = deps.ensureInitialized;
+    this.resolveAgentId = deps.resolveAgentId;
     this.normalizeText = deps.normalizeText;
     this.stablePathKey = deps.stablePathKey;
     this.resolveConfiguredWorkspace = deps.resolveConfiguredWorkspace;
@@ -14,22 +15,28 @@ class ProjectManager {
     this.makeManualProjectKey = deps.makeManualProjectKey;
     this.normalizeSelectedProjectKey = deps.normalizeSelectedProjectKey;
     this.path = deps.path;
-    this.projectCache = null;
+    this.projectCacheByAgent = new Map();
   }
 
-  resolveWorkspaceRoot() {
+  resolveWorkspaceRoot(rawAgentId) {
+    const agentId = this.resolveAgentId(rawAgentId);
     const explicit = this.normalizeText(this.cfg.projectResolver.workspacePath);
     if (explicit) {
       return this.stablePathKey(this.resolveConfiguredWorkspace(explicit));
     }
-    const archiveDir = this.getArchiveDir();
+    const archiveDir = this.getArchiveDir(agentId);
     if (archiveDir) {
       return this.stablePathKey(this.path.dirname(archiveDir));
     }
     return "";
   }
 
-  getStateValue(stateKey) {
+  getScopedStateKey(stateKey, rawAgentId) {
+    return `${stateKey}:${this.resolveAgentId(rawAgentId)}`;
+  }
+
+  getStateValue(stateKey, rawAgentId) {
+    const scopedKey = this.getScopedStateKey(stateKey, rawAgentId);
     const conn = this.ensureInitialized();
     const row =
       conn
@@ -39,11 +46,12 @@ class ProjectManager {
             WHERE state_key = ?
             LIMIT 1`,
         )
-        .get(stateKey) || null;
+        .get(scopedKey) || null;
     return row ? this.normalizeText(row.state_value) : "";
   }
 
-  setStateValue(stateKey, stateValue) {
+  setStateValue(stateKey, stateValue, rawAgentId) {
+    const scopedKey = this.getScopedStateKey(stateKey, rawAgentId);
     const conn = this.ensureInitialized();
     const now = Date.now();
     conn
@@ -54,12 +62,13 @@ class ProjectManager {
            state_value = excluded.state_value,
            updated_at = excluded.updated_at`,
       )
-      .run(stateKey, stateValue, now);
+      .run(scopedKey, stateValue, now);
   }
 
-  deleteStateValue(stateKey) {
+  deleteStateValue(stateKey, rawAgentId) {
+    const scopedKey = this.getScopedStateKey(stateKey, rawAgentId);
     const conn = this.ensureInitialized();
-    conn.prepare(`DELETE FROM plugin_state WHERE state_key = ?`).run(stateKey);
+    conn.prepare(`DELETE FROM plugin_state WHERE state_key = ?`).run(scopedKey);
   }
 
   getProjectByKey(projectKey) {
@@ -95,16 +104,17 @@ class ProjectManager {
     };
   }
 
-  getManualProjectOverride() {
-    return this.getStateValue("active_project_key");
+  getManualProjectOverride(rawAgentId) {
+    return this.getStateValue("active_project_key", rawAgentId);
   }
 
-  detectProjectContext() {
+  detectProjectContext(rawAgentId) {
+    const agentId = this.resolveAgentId(rawAgentId);
     if (!this.cfg.projectResolver.enabled) {
       return null;
     }
 
-    const manualOverride = this.getManualProjectOverride();
+    const manualOverride = this.getManualProjectOverride(agentId);
     if (manualOverride) {
       const existingManual = this.getProjectByKey(manualOverride);
       if (existingManual) {
@@ -112,7 +122,7 @@ class ProjectManager {
           projectKey: existingManual.projectKey,
           projectName: existingManual.projectName || existingManual.projectKey.replace(/^manual:/, ""),
           source: "manual",
-          workspacePath: existingManual.workspacePath || this.resolveWorkspaceRoot() || null,
+          workspacePath: existingManual.workspacePath || this.resolveWorkspaceRoot(agentId) || null,
           gitRoot: existingManual.gitRoot || null,
           gitRemote: existingManual.gitRemote || null,
         };
@@ -121,14 +131,14 @@ class ProjectManager {
         projectKey: manualOverride,
         projectName: manualOverride.replace(/^manual:/, ""),
         source: "manual",
-        workspacePath: this.resolveWorkspaceRoot() || null,
+        workspacePath: this.resolveWorkspaceRoot(agentId) || null,
         gitRoot: null,
         gitRemote: null,
       };
     }
 
     const mode = this.cfg.projectResolver.mode;
-    const workspaceRoot = this.resolveWorkspaceRoot();
+    const workspaceRoot = this.resolveWorkspaceRoot(agentId);
     const candidates = [];
 
     if (mode === "manual" || mode === "auto") {
@@ -261,23 +271,25 @@ class ProjectManager {
     };
   }
 
-  getCurrentProject(forceRefresh) {
+  getCurrentProject(forceRefresh, options = {}) {
+    const agentId = this.resolveAgentId(options.agentId);
     this.ensureInitialized();
-    if (this.projectCache && forceRefresh !== true) {
-      return this.projectCache;
+    if (this.projectCacheByAgent.has(agentId) && forceRefresh !== true) {
+      return this.projectCacheByAgent.get(agentId) || null;
     }
-    const detected = this.detectProjectContext();
+    const detected = this.detectProjectContext(agentId);
     if (!detected) {
-      this.projectCache = null;
+      this.projectCacheByAgent.delete(agentId);
       return null;
     }
-    this.projectCache = this.upsertProjectRegistry(detected);
-    return this.projectCache;
+    const project = this.upsertProjectRegistry(detected);
+    this.projectCacheByAgent.set(agentId, project);
+    return project;
   }
 
   listProjects() {
     const conn = this.ensureInitialized();
-    const activeOverride = this.getManualProjectOverride();
+    const activeOverride = this.getManualProjectOverride(this.resolveAgentId());
     const rows = conn
       .prepare(
         `SELECT project_id, project_key, project_name, source, workspace_path, git_root, git_remote,
@@ -301,8 +313,9 @@ class ProjectManager {
     }));
   }
 
-  bindCurrentProject(projectName) {
-    const current = this.getCurrentProject(true);
+  bindCurrentProject(projectName, options = {}) {
+    const agentId = this.resolveAgentId(options.agentId);
+    const current = this.getCurrentProject(true, { agentId });
     if (!current) {
       return null;
     }
@@ -321,16 +334,18 @@ class ProjectManager {
           WHERE project_id = ?`,
       )
       .run(nextName, now, now, current.projectId);
-    this.projectCache = {
+    const nextProject = {
       ...current,
       projectName: nextName,
       updatedAt: now,
       lastSeenAt: now,
     };
-    return this.projectCache;
+    this.projectCacheByAgent.set(agentId, nextProject);
+    return nextProject;
   }
 
-  useProject(rawProjectKey, projectName) {
+  useProject(rawProjectKey, projectName, options = {}) {
+    const agentId = this.resolveAgentId(options.agentId);
     const selectedProjectKey = this.normalizeSelectedProjectKey(rawProjectKey);
     if (!selectedProjectKey) {
       return null;
@@ -346,12 +361,12 @@ class ProjectManager {
           gitRoot: existing.gitRoot || null,
           gitRemote: existing.gitRemote || null,
         });
-        this.setStateValue("active_project_key", existing.projectKey);
-        this.projectCache = renamed;
+        this.setStateValue("active_project_key", existing.projectKey, agentId);
+        this.projectCacheByAgent.set(agentId, renamed);
         return renamed;
       }
-      this.setStateValue("active_project_key", existing.projectKey);
-      this.projectCache = this.upsertProjectRegistry({
+      this.setStateValue("active_project_key", existing.projectKey, agentId);
+      const updated = this.upsertProjectRegistry({
         projectKey: existing.projectKey,
         projectName: existing.projectName || existing.projectKey.replace(/^manual:/, ""),
         source: existing.source || "manual",
@@ -359,14 +374,15 @@ class ProjectManager {
         gitRoot: existing.gitRoot || null,
         gitRemote: existing.gitRemote || null,
       });
-      return this.projectCache;
+      this.projectCacheByAgent.set(agentId, updated);
+      return updated;
     }
 
     const manualProjectKey = this.makeManualProjectKey(rawProjectKey);
     if (!manualProjectKey) {
       return null;
     }
-    const workspaceRoot = this.resolveWorkspaceRoot();
+    const workspaceRoot = this.resolveWorkspaceRoot(agentId);
     const project = this.upsertProjectRegistry({
       projectKey: manualProjectKey,
       projectName: this.normalizeText(projectName) || manualProjectKey.replace(/^manual:/, ""),
@@ -375,19 +391,20 @@ class ProjectManager {
       gitRoot: null,
       gitRemote: null,
     });
-    this.setStateValue("active_project_key", manualProjectKey);
-    this.projectCache = project;
+    this.setStateValue("active_project_key", manualProjectKey, agentId);
+    this.projectCacheByAgent.set(agentId, project);
     return project;
   }
 
-  clearProjectOverride() {
-    this.deleteStateValue("active_project_key");
-    this.projectCache = null;
-    return this.getCurrentProject(true);
+  clearProjectOverride(options = {}) {
+    const agentId = this.resolveAgentId(options.agentId);
+    this.deleteStateValue("active_project_key", agentId);
+    this.projectCacheByAgent.delete(agentId);
+    return this.getCurrentProject(true, { agentId });
   }
 
-  getProjectOverride() {
-    return this.getManualProjectOverride();
+  getProjectOverride(options = {}) {
+    return this.getManualProjectOverride(this.resolveAgentId(options.agentId));
   }
 }
 

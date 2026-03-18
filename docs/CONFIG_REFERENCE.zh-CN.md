@@ -2,6 +2,12 @@
 
 本文档列出 `memory-hybrid-context` 在正式使用中涉及的主要配置项。
 
+文档边界：
+
+1. 本文档描述的是 `v0.2.0` 已实现并可直接使用的配置
+2. 单网关强隔离（`agent_id`）已经落地，默认 `isolation.mode = agent`
+3. 强隔离实现细节与取舍请看 [AGENT_ISOLATION_DESIGN.zh-CN.md](./AGENT_ISOLATION_DESIGN.zh-CN.md)
+
 配置分两层：
 
 1. OpenClaw 外层配置
@@ -188,9 +194,13 @@
 ### `store.vector.extensionPath`
 
 1. 类型：`string`
-2. 推荐值：`/home/cxd/.openclaw/workspace/.agents/vec0.so`
-3. 是否必填：仅 `sqlite-vec` 场景建议填写
-4. 作用：SQLite 向量扩展路径
+2. 默认值：`""`
+3. 推荐值：`""`（大多数场景）
+4. 是否必填：仅 `sqlite-vec` 场景建议填写
+5. 作用：SQLite 向量扩展路径
+6. 说明：
+   - 当前使用 `ann-local` / `hash-vec` 时通常不需要配置该项
+   - 仅当你明确使用 `sqlite-vec` 且运行时不能自动加载扩展时，再填具体路径
 
 ### `store.vector.candidateLimit`
 
@@ -287,16 +297,35 @@
 ### `archive.dir`
 
 1. 类型：`string`
-2. 默认值：`~/.openclaw/workspace/.memory-hybrid`
-3. 推荐值：`~/.openclaw/workspace/.memory-hybrid`
+2. 默认值：`~/.openclaw/memory-hybrid/archive`
+3. 推荐值：`~/.openclaw/memory-hybrid/archive`
 4. 作用：归档目录
-5. 注意：建议使用独立目录，不要复用旧 `workspace/memory`
+5. 注意：建议使用插件级独立目录，不要复用旧 `workspace/memory`
+6. 迁移提示：如果你从旧值（`~/.openclaw/workspace/.memory-hybrid`）切换到新值，建议执行 `archive-repair` 对齐 `source_path`
 
 ### `archive.writeMarkdown`
 
 1. 类型：`boolean`
 2. 推荐值：`true`
 3. 作用：是否实际写归档 Markdown
+
+### `isolation.mode`
+
+1. 类型：`string`
+2. 可选值：`agent`、`global`
+3. 默认值：`agent`
+4. 推荐值：`agent`
+5. 作用：
+   - `agent`：启用单网关强隔离。写入/检索/治理都按 `agent_id` 过滤，归档路径按 `<archive.dir>/<agentId>/...` 分桶
+   - `global`：兼容模式。所有记录统一写到 `agent_id = global`，所有 agent 共享同一记忆视图；归档路径使用 `<archive.dir>/records/...`
+
+### `isolation.defaultAgentId`
+
+1. 类型：`string`
+2. 默认值：`main`
+3. 推荐值：`main`
+4. 作用：当 hook 上下文或工具参数没有提供 `agentId` 时的兜底值
+5. 注意：该值会参与归档路径计算（`agent` 模式）
 
 ### `capture.autoStage`
 
@@ -400,6 +429,13 @@
 3. 推荐值：`L1`
 4. 作用：默认分层注入级别
 
+### 自动召回触发边界（系统命令过滤）
+
+1. 自动召回默认只在“用户自然语言提问”场景触发
+2. `/new` / `/reset` 的会话启动提示、Session Startup 系统提示不会注入 recall 包
+3. 目标：避免 `<memory-hybrid-context>...</memory-hybrid-context>` 出现在系统命令响应中
+4. 回归建议：如怀疑回归，请执行 [TESTING.zh-CN.md](./TESTING.zh-CN.md) 的“4.5 系统命令不触发召回测试”
+
 ### `query.hybrid`
 
 1. 类型：`boolean`
@@ -491,6 +527,41 @@
    - `pattern`：可复用执行方法（SOP）
    - `case`：经验案例与复盘模板
    - `other`：未分类兜底类型
+
+### `scopes.typeRouting.user`
+
+1. 类型：`string[]`
+2. 推荐值：`["profile", "preference"]`
+3. 作用：定义优先落到 `user` 作用域的记忆类型集合
+4. 建议：只放跨项目长期稳定的人设/偏好类型，避免把项目事件写入 `user`
+
+### `scopes.typeRouting.project`
+
+1. 类型：`string[]`
+2. 推荐值：`["decision", "event", "todo", "entity", "case", "other"]`
+3. 作用：定义优先落到 `project` 作用域的类型集合
+4. 建议：把 `other` 放在这里做兜底，减少未分类内容污染 `user`
+
+### `scopes.typeRouting.agent`
+
+1. 类型：`string[]`
+2. 推荐值：`["pattern"]`（个人用户可设为 `[]`）
+3. 作用：定义优先落到 `agent` 作用域的类型集合
+4. 建议：只放执行方法模板、SOP、流程套路这类“按 agent 复用”的类型
+
+### `scopes.enableProject`
+
+1. 类型：`boolean`
+2. 默认值：`true`
+3. 作用：兼容开关；`false` 时会从已启用作用域中移除 `project`
+4. 建议：新配置优先只维护 `scopes.enabled`；该字段主要用于兼容旧配置
+
+### `scopes.enableAgent`
+
+1. 类型：`boolean`
+2. 默认值：`true`
+3. 作用：兼容开关；`false` 时会从已启用作用域中移除 `agent`
+4. 建议：新配置优先只维护 `scopes.enabled`；该字段主要用于兼容旧配置
 
 `typeRouting` 如何自行决定填什么：
 
@@ -621,35 +692,58 @@
 ### `projectResolver.enabled`
 
 1. 类型：`boolean`
-2. 推荐值：`true`
-3. 作用：启用项目解析
+2. 代码默认值：`true`
+3. 推荐值：`true`
+4. 作用：启用项目解析（将 `project` 作用域映射到稳定的 `mem://project/<projectId>`）
+5. 说明：关闭后不会做项目绑定；`scopes` 仍可工作，但 `project` 作用域通常会回退到非项目粒度
 
 ### `projectResolver.mode`
 
 1. 类型：`string`
-2. 可选值：
-   - `auto`
-   - `manual`
-   - `workspace`
-   - `git`
-3. 推荐值：`manual`
-4. 作用：项目识别策略
+2. 可选值：`auto` | `manual` | `workspace` | `git`
+3. 代码默认值：`auto`
+4. 推荐值：`manual`（更稳定、可控）
+5. 作用：项目识别策略
+6. 识别行为（`manual`）：仅使用 `manualKey/manualName`（或运行期 `project use` 覆盖）
+7. 识别行为（`workspace`）：按工作区路径识别项目
+8. 识别行为（`git`）：按 git 根目录 / origin remote 识别项目
+9. 识别行为（`auto`）：按 `manual -> git -> workspace` 顺序尝试，命中第一个可用策略
 
 ### `projectResolver.workspacePath`
 
 1. 类型：`string`
 2. 推荐值：`/home/cxd/.openclaw/workspace`
 3. 作用：项目解析的工作区根路径
+4. 说明：留空时会回退为“当前归档目录的父目录”；为避免项目键漂移，建议显式配置
 
 ### `projectResolver.manualKey`
 
 1. 类型：`string`
-2. 作用：手动项目键
+2. 作用：手动项目键（稳定主键）
+3. 说明：`mode=manual` 时建议必填；若为空且无运行期覆盖，项目可能无法解析
+4. 归一化：内部会标准化为 `manual:<key>` 形式
 
 ### `projectResolver.manualName`
 
 1. 类型：`string`
-2. 作用：手动项目显示名
+2. 作用：手动项目显示名（仅展示用途）
+3. 说明：不参与项目唯一性判定；唯一性由 `manualKey/projectKey` 决定
+
+### `projectResolver` 解析优先级（运行时）
+
+1. 若存在运行期覆盖（`openclaw mhm project use`），优先使用覆盖值
+2. 若无覆盖，按 `projectResolver.mode` 检测项目上下文
+3. 检测结果会写入 `project_registry`，并为项目分配/复用稳定 `projectId`（UUID）
+4. `project` 作用域最终落为 `mem://project/<projectId>`
+5. 运行期覆盖按 agent 维度保存（`plugin_state.active_project_key:<agentId>`），重启后保留
+
+### `projectResolver` 运维命令
+
+1. `openclaw mhm project current`：查看当前解析结果和覆盖值
+2. `openclaw mhm project list`：查看已登记项目
+3. `openclaw mhm project use <key> --name <name>`：设置手动项目覆盖
+4. `openclaw mhm project bind <name>`：重命名当前项目展示名
+5. `openclaw mhm project clear`：清除覆盖，回到自动解析
 
 ### `ttl.todoDays`
 
@@ -682,6 +776,11 @@
 3. 作用：过期记录保留多久后自动 purge
 
 ## 3. 配置案例
+
+说明：
+
+1. 下面案例如未显式给出 `isolation`，默认按代码默认值：`isolation.mode = agent`、`isolation.defaultAgentId = main`
+2. `scopes` 是语义路由，不是执行隔离；多 agent 硬隔离由 `isolation` 控制
 
 ### 案例 A：最小可用
 
@@ -723,13 +822,17 @@
           },
           "archive": {
             "enabled": true,
-            "dir": "/home/cxd/.openclaw/workspace/.memory-hybrid"
+            "dir": "/home/cxd/.openclaw/memory-hybrid/archive"
           },
           "recall": {
             "auto": true,
             "maxItems": 3,
             "maxChars": 720,
             "defaultLevel": "L1"
+          },
+          "isolation": {
+            "mode": "agent",
+            "defaultAgentId": "main"
           }
         }
       }
@@ -789,7 +892,7 @@
           },
           "archive": {
             "enabled": true,
-            "dir": "/home/cxd/.openclaw/workspace/.memory-hybrid"
+            "dir": "/home/cxd/.openclaw/memory-hybrid/archive"
           },
           "capture": {
             "autoStage": true,
@@ -812,7 +915,10 @@
           },
           "projectResolver": {
             "enabled": true,
-            "mode": "manual"
+            "mode": "manual",
+            "workspacePath": "/home/cxd/.openclaw/workspace",
+            "manualKey": "openclaw-main",
+            "manualName": "OpenClaw Main"
           },
           "ttl": {
             "todoDays": 14,
@@ -820,6 +926,10 @@
             "autoCleanup": true,
             "cleanupPollMs": 60000,
             "purgeAfterDays": 30
+          },
+          "isolation": {
+            "mode": "agent",
+            "defaultAgentId": "main"
           }
         }
       }
@@ -872,6 +982,10 @@
             "maxItems": 3,
             "maxChars": 900,
             "defaultLevel": "L1"
+          },
+          "isolation": {
+            "mode": "agent",
+            "defaultAgentId": "main"
           }
         }
       }
@@ -921,13 +1035,17 @@
           },
           "archive": {
             "enabled": true,
-            "dir": "/home/cxd/.openclaw/workspace/.memory-hybrid"
+            "dir": "/home/cxd/.openclaw/memory-hybrid/archive"
           },
           "recall": {
             "auto": true,
             "maxItems": 3,
             "maxChars": 720,
             "defaultLevel": "L1"
+          },
+          "isolation": {
+            "mode": "agent",
+            "defaultAgentId": "main"
           }
         }
       }
