@@ -222,7 +222,13 @@ function mergeConfig(raw) {
       : DEFAULT_CONFIG.projectResolver.mode;
   cfg.projectResolver.workspacePath = normalizeText(cfg.projectResolver.workspacePath);
   cfg.projectResolver.manualKey = normalizeText(cfg.projectResolver.manualKey);
+  if (cfg.projectResolver.mode === "manual" && !cfg.projectResolver.manualKey) {
+    cfg.projectResolver.manualKey = "default";
+  }
   cfg.projectResolver.manualName = normalizeText(cfg.projectResolver.manualName);
+  if (cfg.projectResolver.mode === "manual" && !cfg.projectResolver.manualName) {
+    cfg.projectResolver.manualName = cfg.projectResolver.manualKey;
+  }
   cfg.projectResolver.enabled = cfg.projectResolver.enabled !== false;
   if (!cfg.ttl || typeof cfg.ttl !== "object") {
     cfg.ttl = mergeObject(DEFAULT_CONFIG.ttl, {});

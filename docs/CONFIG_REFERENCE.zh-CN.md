@@ -338,9 +338,10 @@
 ### `capture.useLlmExtraction`
 
 1. 类型：`boolean`
-2. 推荐值：`false` 或按需开启
-3. 作用：是否使用 LLM 辅助提取
-4. 注意：开启后依赖模型可用性
+2. 推荐值：`false`
+3. 当前状态：预留开关，当前版本尚未接入 LLM 抽取分支
+4. 实际行为：无论设为 `true` 还是 `false`，当前都走规则抽取
+5. 说明：该字段为后续扩展保留；若未来版本生效，会在 `CHANGELOG` 明确说明
 
 ### `capture.maxCandidatesPerTurn`
 
@@ -713,21 +714,45 @@
 
 1. 类型：`string`
 2. 推荐值：`/home/cxd/.openclaw/workspace`
-3. 作用：项目解析的工作区根路径
+3. 作用：项目解析的“识别基准路径”（不是数据存储目录）
 4. 说明：留空时会回退为“当前归档目录的父目录”；为避免项目键漂移，建议显式配置
+5. 多 agent 说明：
+   - `workspacePath` 是全局单值，不按 agent 单独配置
+   - agent 维度的项目归属通过 `agentId` + `project use` 运行期覆盖决定
+6. 取值建议：
+   - 优先填“真实项目根或公共工作区根”，例如 `~/.openclaw/workspace` 或 `~/Projects`
+   - 不建议直接填 `~/.openclaw` 根目录（系统目录过宽，容易造成项目识别过粗）
+   - 若 `mode=manual`，也可填稳定占位目录（如 `~/.openclaw/memory-hybrid/workspace`）
+
+### `projectResolver.workspacePath` 与 `archive.dir` 的区别
+
+1. `projectResolver.workspacePath`：项目识别输入（决定 `projectKey` 的来源）
+2. `archive.dir`：插件归档输出（Markdown 归档落盘目录）
+3. 两者可以都在 `~/.openclaw` 下，但语义不同：
+   - 前者用于“识别”
+   - 后者用于“存储”
+4. 不建议把两者配置成同一目录
 
 ### `projectResolver.manualKey`
 
 1. 类型：`string`
-2. 作用：手动项目键（稳定主键）
-3. 说明：`mode=manual` 时建议必填；若为空且无运行期覆盖，项目可能无法解析
-4. 归一化：内部会标准化为 `manual:<key>` 形式
+2. 配置层默认值：`""`（空）
+3. 运行时补全：当 `mode=manual` 且该值为空时，自动补为 `default`
+4. 作用：手动项目键（稳定主键）
+5. 建议：生产环境仍建议显式填写，避免多个环境都落到 `manual:default`
+6. 归一化：内部会标准化为 `manual:<key>` 形式
+7. 为什么采用“配置空值 + 运行时补全”：
+   - 避免在 `mode=auto` 下被固定 manual key 抢占（影响 git/workspace 自动识别）
+   - 在 `mode=manual` 下保证开箱可用（即使未配置也不会 `currentProject=null`）
+8. 推荐命名：`openclaw-main`、`team-a-prod`、`repo-foo-main`（稳定、可读、可迁移）
 
 ### `projectResolver.manualName`
 
 1. 类型：`string`
 2. 作用：手动项目显示名（仅展示用途）
-3. 说明：不参与项目唯一性判定；唯一性由 `manualKey/projectKey` 决定
+3. 配置层默认值：`""`（空）
+4. 运行时补全：当 `mode=manual` 且该值为空时，自动回退到 `manualKey`（若 `manualKey` 也为空，会先补成 `default`）
+5. 说明：不参与项目唯一性判定；唯一性由 `manualKey/projectKey` 决定
 
 ### `projectResolver` 解析优先级（运行时）
 
@@ -744,6 +769,9 @@
 3. `openclaw mhm project use <key> --name <name>`：设置手动项目覆盖
 4. `openclaw mhm project bind <name>`：重命名当前项目展示名
 5. `openclaw mhm project clear`：清除覆盖，回到自动解析
+6. 多 agent 场景建议显式带 `--agent-id`：
+   - `openclaw mhm --agent-id agent-a project use proj-a --name "Project A"`
+   - `openclaw mhm --agent-id agent-b project use proj-b --name "Project B"`
 
 ### `ttl.todoDays`
 

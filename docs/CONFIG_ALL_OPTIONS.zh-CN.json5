@@ -158,8 +158,9 @@
             // 默认值（插件）：true
             autoStage: true,
 
-            // 作用：是否使用 LLM 进行候选抽取（当前默认规则抽取）。
+            // 作用：是否使用 LLM 进行候选抽取（预留开关）。
             // 默认值（插件）：false
+            // 当前状态：当前版本未接入 LLM 抽取分支，true/false 暂无行为差异（均走规则抽取）。
             useLlmExtraction: false,
 
             // 作用：单轮最多暂存候选条数。
@@ -347,19 +348,29 @@
             // - auto: 按 manual -> git -> workspace 顺序尝试
             mode: "auto",
 
-            // 作用：workspace/git 模式下用于计算项目键的工作区路径。
+            // 作用：workspace/git 模式下用于计算项目键的“识别基准路径”（不是存储目录）。
             // 默认值（插件）：""
-            // 说明：为空时会回退到“归档目录父路径”；建议显式填写，避免项目键漂移。
+            // 说明：
+            // - 为空时会回退到“归档目录父路径”；建议显式填写，避免项目键漂移。
+            // - 这是全局单值，不按 agent 分别配置；多 agent 的项目归属靠 `--agent-id + project use`。
+            // - 不建议直接填 ~/.openclaw 根目录（系统目录过宽，项目识别容易过粗）。
             workspacePath: "",
 
             // 作用：manual 模式下固定项目 key。
-            // 默认值（插件）：""
-            // 说明：mode=manual 时建议必填；否则需用 `openclaw mhm project use <key>` 运行期覆盖。
+            // 默认值（配置层）：""
+            // 生效默认值（manual 模式）："default"
+            // 说明：
+            // - mode=manual 且为空时，运行时会自动补为 "default"（保证开箱可用）。
+            // - 生产环境仍建议显式填写，避免多个环境都落到同一个 manual:default。
+            // - 默认留空是有意设计：避免在 mode=auto 下固定 manualKey 抢占 git/workspace 自动识别。
             manualKey: "",
 
             // 作用：manual 模式下固定项目显示名。
-            // 默认值（插件）：""
-            // 说明：仅展示用途，不参与唯一性判定（唯一性看 project key）。
+            // 默认值（配置层）：""
+            // 生效默认值（manual 模式）：跟随 manualKey（manualKey 为空时先补 "default"）
+            // 说明：
+            // - 仅展示用途，不参与唯一性判定（唯一性看 project key）。
+            // - mode=manual 且留空时，运行时会自动补为 manualKey（如 default）。
             manualName: "",
           },
 

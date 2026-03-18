@@ -232,9 +232,16 @@ tar -xzf ~/.openclaw/extensions/memory-hybrid-context-latest.bundle.tar.gz -C ~/
 
 `projectResolver` 补充说明：
 
-1. 若使用 `mode = "manual"`，建议同时配置 `manualKey`；否则项目可能无法解析（除非你再执行 `openclaw mhm project use <key>`）
-2. 若使用 `mode = "auto"`，可不填 `manualKey`，让插件按 `manual -> git -> workspace` 顺序自动识别
-3. `workspacePath` 建议显式配置，避免回退到归档目录父路径导致项目键不符合预期
+1. 若使用 `mode = "manual"`，建议配置 `manualKey`；若留空，运行时会自动补成 `default`（也可后续执行 `openclaw mhm project use <key>` 覆盖）
+2. 若使用 `mode = "manual"` 且不填 `manualName`，运行时会自动回退为 `manualKey`（仅展示用途，不影响唯一性）
+3. 若使用 `mode = "auto"`，可不填 `manualKey`，让插件按 `manual -> git -> workspace` 顺序自动识别
+4. `workspacePath` 建议显式配置，避免回退到归档目录父路径导致项目键不符合预期
+5. `workspacePath` 是“项目识别基准路径”，不是存储目录；`archive.dir` 才是归档存储目录
+6. 多 agent 下 `workspacePath` 仍是全局单值；建议通过 `--agent-id + project use` 绑定各 agent 的项目覆盖：
+```bash
+openclaw mhm --agent-id agent-a project use proj-a --name "Project A"
+openclaw mhm --agent-id agent-b project use proj-b --name "Project B"
+```
 
 如果你是从旧配置升级（旧值是 `/home/cxd/.openclaw/workspace/.memory-hybrid`）：
 
